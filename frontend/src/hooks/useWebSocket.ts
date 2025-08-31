@@ -97,23 +97,53 @@ export const useWebSocket = ({
       socket.onmessage = (event) => {
         if (!isMounted) return;
         try {
-          console.log('WebSocket message received:', event.data);
-          const responseText = event.data;
-          
-          // Skip connection confirmation messages
-          if (responseText === 'WebSocket接続が確立されました') {
+          const raw = event.data;
+          console.log('WebSocket message received:', raw);
+
+          // Try typed JSON protocol first
+          let parsed: WebSocketMessage | null = null;
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            parsed = null;
+          }
+
+          if (parsed && typeof parsed === 'object' && 'type' in parsed) {
+            if (parsed.type === 'status') {
+              onStatusUpdate?.(parsed.data);
+              return;
+            }
+            if (parsed.type === 'error') {
+              onError?.(parsed.data);
+              return;
+            }
+            if (parsed.type === 'message') {
+              const msgData = parsed.data as Message;
+              const message: Message = {
+                id: msgData.id || Date.now().toString(),
+                content: msgData.content,
+                role: msgData.role,
+                timestamp: msgData.timestamp || new Date().toISOString(),
+                session_id: msgData.session_id || sessionId,
+                file_context: msgData.file_context,
+              };
+              onMessage?.(message);
+              return;
+            }
+          }
+
+          // Backward compatibility: plain text payloads
+          if (raw === 'WebSocket接続が確立されました') {
             return;
           }
-          
-          // Create message object for UI
+
           const message: Message = {
             id: Date.now().toString(),
-            content: responseText,
+            content: raw,
             role: 'assistant',
             timestamp: new Date().toISOString(),
             session_id: sessionId,
           };
-          
           onMessage?.(message);
         } catch (error) {
           console.error('Error processing WebSocket message:', error);

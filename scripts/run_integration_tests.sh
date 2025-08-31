@@ -47,12 +47,12 @@ echo "--------------------------------"
 
 # ヘルスチェック
 echo "バックエンドヘルスチェック..."
-BACKEND_HEALTH=$(docker compose exec -T backend curl -s http://localhost:8000/api/v1/health || echo "FAILED")
+BACKEND_HEALTH=$(docker compose exec -T backend curl -s http://localhost:8002/api/v1/health || echo "FAILED")
 echo "結果: $BACKEND_HEALTH"
 
 # フロントエンドからバックエンドへの接続確認
 echo "フロントエンド→バックエンド接続確認..."
-FRONTEND_TO_BACKEND=$(docker compose exec -T frontend curl -s http://backend:8000/api/v1/health || echo "FAILED")
+FRONTEND_TO_BACKEND=$(docker compose exec -T frontend curl -s http://backend:8002/api/v1/health || echo "FAILED")
 echo "結果: $FRONTEND_TO_BACKEND"
 
 echo ""

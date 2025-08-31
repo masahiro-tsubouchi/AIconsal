@@ -2,21 +2,27 @@
 import time
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from uuid import uuid4
 import structlog
 
 from app.core.config import get_settings
 from app.models.chat import ChatRequest, ChatResponse, ChatMessage, ChatHistory
+from app.models.ws import WSStatus, WSError, WSChatMessage
 from app.services.chat_service import ChatService
 
 router = APIRouter()
 logger = structlog.get_logger()
 
+def get_chat_service() -> ChatService:
+    """Dependency factory to create ChatService without FastAPI inspecting its __init__ signature."""
+    return ChatService()
+
 
 @router.post("/", response_model=ChatResponse)
 async def send_message(
     request: ChatRequest,
-    chat_service: ChatService = Depends()
+    chat_service: ChatService = Depends(get_chat_service)
 ) -> ChatResponse:
     """Send a chat message and get AI response"""
     start_time = time.time()
@@ -78,7 +84,7 @@ async def send_message(
 @router.get("/history/{session_id}", response_model=ChatHistory)
 async def get_chat_history(
     session_id: str,
-    chat_service: ChatService = Depends()
+    chat_service: ChatService = Depends(get_chat_service)
 ) -> ChatHistory:
     """Get chat history for a session"""
     try:
@@ -108,8 +114,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
         # Initialize chat service first
         chat_service = ChatService()
         
-        # Send connection confirmation
-        await websocket.send_text("WebSocket接続が確立されました")
+        # Send connection confirmation (typed JSON)
+        status = WSStatus(session_id=session_id, data="connected")
+        await websocket.send_json(jsonable_encoder(status))
         logger.info("websocket_setup_complete", session_id=session_id)
         
         # Main message loop
@@ -125,8 +132,17 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     session_id=session_id
                 )
                 
-                # Send response back
-                await websocket.send_text(response)
+                # Create assistant message and persist to history
+                assistant_message = ChatMessage(
+                    session_id=session_id,
+                    content=response,
+                    role="assistant",
+                )
+                await chat_service.add_message_to_history(assistant_message)
+
+                # Send typed message back as JSON
+                ws_msg = WSChatMessage(session_id=session_id, data=assistant_message)
+                await websocket.send_json(jsonable_encoder(ws_msg))
                 logger.info("websocket_response_sent", session_id=session_id, response_length=len(response))
                     
             except WebSocketDisconnect:
@@ -140,7 +156,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     error_type=type(e).__name__
                 )
                 try:
-                    await websocket.send_text(f"エラー: {str(e)}")
+                    error_msg = WSError(session_id=session_id, data=f"エラー: {str(e)}")
+                    await websocket.send_json(jsonable_encoder(error_msg))
                 except:
                     logger.info("websocket_error_send_failed", session_id=session_id)
                     break

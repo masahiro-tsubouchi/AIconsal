@@ -1,23 +1,35 @@
 """Chat service for handling conversation logic"""
 import time
-from typing import Dict, List, Optional
+from typing import List, Optional
 from uuid import uuid4
 import structlog
 
 from app.models.chat import ChatMessage, ChatHistory, SessionInfo
 from app.services.langgraph_service import LangGraphService
 from app.services.file_service import FileService
+from app.repositories.chat_history import (
+    ChatHistoryRepository,
+    InMemoryChatHistoryRepository,
+)
 
 logger = structlog.get_logger()
+
+# Shared in-memory repository instance to persist across requests
+_DEFAULT_REPO = InMemoryChatHistoryRepository()
 
 
 class ChatService:
     """Service for managing chat conversations"""
     
-    def __init__(self):
-        self._sessions: Dict[str, ChatHistory] = {}
-        self._langgraph_service = LangGraphService()
-        self._file_service = FileService()
+    def __init__(
+        self,
+        repository: Optional[ChatHistoryRepository] = None,
+        langgraph_service: Optional[LangGraphService] = None,
+        file_service: Optional[FileService] = None,
+    ):
+        self._repo: ChatHistoryRepository = repository or _DEFAULT_REPO
+        self._langgraph_service = langgraph_service or LangGraphService()
+        self._file_service = file_service or FileService()
     
     async def process_message(
         self, 
@@ -28,7 +40,7 @@ class ChatService:
         """Process a user message and return AI response"""
         try:
             # Get or create session
-            session = await self._get_or_create_session(session_id)
+            session = await self._repo.create_if_absent(session_id)
             
             # Add user message to history
             user_message = ChatMessage(
@@ -74,28 +86,19 @@ class ChatService:
     
     async def add_message_to_history(self, message: ChatMessage) -> None:
         """Add a message to session history"""
-        session = await self._get_or_create_session(message.session_id)
-        session.messages.append(message)
-        session.last_active = message.timestamp
+        await self._repo.add_message(message)
     
     async def get_chat_history(self, session_id: str) -> Optional[ChatHistory]:
         """Get chat history for a session"""
-        return self._sessions.get(session_id)
+        return await self._repo.get(session_id)
     
     async def _get_or_create_session(self, session_id: str) -> ChatHistory:
-        """Get existing session or create new one"""
-        if session_id not in self._sessions:
-            self._sessions[session_id] = ChatHistory(
-                session_id=session_id,
-                messages=[],
-            )
-            logger.info("new_session_created", session_id=session_id)
-        
-        return self._sessions[session_id]
+        """Get existing session or create new one (compat shim)."""
+        return await self._repo.create_if_absent(session_id)
     
     async def _build_conversation_context(self, session_id: str, max_messages: int = 10) -> str:
         """Build conversation context from recent messages"""
-        session = self._sessions.get(session_id)
+        session = await self._repo.get(session_id)
         if not session:
             return ""
         
@@ -121,24 +124,5 @@ class ChatService:
         return "\n\n".join(file_contexts)
     
     async def cleanup_old_sessions(self, max_age_hours: int = 24) -> int:
-        """Clean up old sessions"""
-        import datetime
-        
-        cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=max_age_hours)
-        sessions_to_remove = []
-        
-        for session_id, session in self._sessions.items():
-            if session.last_active < cutoff_time:
-                sessions_to_remove.append(session_id)
-        
-        for session_id in sessions_to_remove:
-            del self._sessions[session_id]
-        
-        if sessions_to_remove:
-            logger.info(
-                "sessions_cleaned_up",
-                cleaned_count=len(sessions_to_remove),
-                remaining_count=len(self._sessions)
-            )
-        
-        return len(sessions_to_remove)
+        """Clean up old sessions via repository."""
+        return await self._repo.cleanup(max_age_hours=max_age_hours)
