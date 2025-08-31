@@ -1,14 +1,10 @@
-"""Simple tools scaffolding for future integrations (SQL, Web search, etc.)
+"""Tool detection utilities.
 
-This module intentionally avoids external side effects and network calls.
-It provides:
-- detect_tool_request: parse explicit tool prefixes like "sql:" or "web:"
-- execute_tool: safe, non-network placeholder that returns informative messages
+Parses explicit user prefixes to route to tools safely.
 """
 from __future__ import annotations
 
 from typing import Optional, Tuple
-
 
 # Supported tool prefixes -> canonical tool name
 _PREFIX_MAP = {
@@ -55,29 +51,3 @@ def detect_tool_request(text: str) -> Tuple[Optional[str], Optional[str]]:
             return (tool, arg)
 
     return (None, None)
-
-
-def execute_tool(tool: Optional[str], arg: str) -> str:
-    """Execute the specified tool in a safe, placeholder manner.
-
-    This is a stub that does NOT hit databases or the network.
-    It returns an instructional message suitable for early scaffolding.
-    """
-    if not tool:
-        return "不明なツールが指定されました。サポートされている例: sql:, web: / search:"
-
-    t = tool.lower()
-    if t == "sql":
-        return (
-            "[SQL Tool] まだ有効化されていません。\n"
-            "将来的には安全な読み取り専用クエリ実行（パラメータ化・監査ログ）を提供予定です。\n"
-            f"受領クエリ候補: {arg}"
-        )
-    if t == "web":
-        return (
-            "[Web Search Tool] まだ有効化されていません。\n"
-            "将来的には検索プロバイダ統合＋要約（ソース出典付き）を提供予定です。\n"
-            f"受領検索語: {arg}"
-        )
-
-    return f"[Tool:{tool}] まだ有効化されていません。入力: {arg}"

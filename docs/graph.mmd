@@ -1,0 +1,15 @@
+flowchart TD
+  analyze_query[Analyze Query]
+  process_manufacturing[Manufacturing Advisor]
+  process_python[Python Mentor]
+  general_response[General Response]
+  process_tool[Tool Executor]
+  END((END))
+  analyze_query -- manufacturing --> process_manufacturing
+  analyze_query -- python --> process_python
+  analyze_query -- general --> general_response
+  analyze_query -- tool --> process_tool
+  process_manufacturing --> END
+  process_python --> END
+  general_response --> END
+  process_tool --> END

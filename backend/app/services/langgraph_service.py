@@ -8,6 +8,11 @@ from app.core.config import get_settings
 from app.services.llm.base import LLMProvider
 from app.services.llm.gemini import GeminiProvider
 from app.services.tools import detect_tool_request, execute_tool
+from app.services.agents import (
+    manufacturing_advisor,
+    python_mentor,
+    general_responder,
+)
 
 logger = structlog.get_logger()
 
@@ -66,6 +71,33 @@ class LangGraphService:
         workflow.add_edge("process_tool", END)
         
         return workflow.compile()
+
+    def export_mermaid(self) -> str:
+        """Export the current workflow as a Mermaid flowchart (text).
+
+        Note: This mirrors the nodes/edges defined in _build_workflow(). Keep in sync if the
+        workflow topology changes.
+        """
+        lines = [
+            "flowchart TD",
+            "  analyze_query[Analyze Query]",
+            "  process_manufacturing[Manufacturing Advisor]",
+            "  process_python[Python Mentor]",
+            "  general_response[General Response]",
+            "  process_tool[Tool Executor]",
+            "  END((END))",
+            # Conditional edges from analyze_query
+            "  analyze_query -- manufacturing --> process_manufacturing",
+            "  analyze_query -- python --> process_python",
+            "  analyze_query -- general --> general_response",
+            "  analyze_query -- tool --> process_tool",
+            # Terminal edges
+            "  process_manufacturing --> END",
+            "  process_python --> END",
+            "  general_response --> END",
+            "  process_tool --> END",
+        ]
+        return "\n".join(lines)
     
     async def process_manufacturing_query(
         self, 
@@ -155,35 +187,12 @@ class LangGraphService:
     async def _process_manufacturing_query(self, state: ManufacturingState) -> ManufacturingState:
         """Process manufacturing-related queries"""
         try:
-            context_info = ""
-            if state['conversation_history']:
-                context_info += f"\n\n過去の会話:\n{state['conversation_history']}"
-            
-            if state['file_context']:
-                context_info += f"\n\n関連ファイル:\n{state['file_context']}"
-            
-            manufacturing_prompt = f"""
-            あなたは製造業の改善活動を専門とするAIコンサルタントです。
-            以下の質問に対して、実践的で具体的なアドバイスを提供してください。
-
-            質問: {state['user_query']}
-            {context_info}
-
-            回答の際は以下の点を考慮してください：
-            - 製造業の現場で実際に適用できる実践的な提案
-            - 改善活動のステップを具体的に説明
-            - 可能であれば数値目標や測定方法も含める
-            - リスクや注意点も言及する
-            - 日本語で丁寧に回答する
-
-            回答:
-            """
-            
-            if getattr(self, "_llm", None) and getattr(self._llm, "is_configured", False):
-                state['response'] = await self._llm.generate(manufacturing_prompt)
-            else:
-                state['response'] = "申し訳ございません。現在LLMプロバイダが設定されていないため、製造業に関する詳細なアドバイスを提供できません。API設定を確認してください。"
-            
+            state['response'] = await manufacturing_advisor.run(
+                self._llm,
+                state['user_query'],
+                state['conversation_history'],
+                state['file_context'],
+            )
         except Exception as e:
             logger.error("manufacturing_processing_error", error=str(e))
             state['error'] = str(e)
@@ -193,36 +202,12 @@ class LangGraphService:
     async def _process_python_query(self, state: ManufacturingState) -> ManufacturingState:
         """Process Python-related queries"""
         try:
-            context_info = ""
-            if state['conversation_history']:
-                context_info += f"\n\n過去の会話:\n{state['conversation_history']}"
-            
-            if state['file_context']:
-                context_info += f"\n\n関連ファイル:\n{state['file_context']}"
-            
-            python_prompt = f"""
-            あなたは製造業で使用するPythonの専門講師です。
-            以下の質問に対して、実用的で理解しやすい回答を提供してください。
-
-            質問: {state['user_query']}
-            {context_info}
-
-            回答の際は以下の点を考慮してください：
-            - 製造業の現場で活用できるPythonの使い方
-            - 具体的なコード例を含める（可能な場合）
-            - 初心者にも理解しやすい説明
-            - データ分析や自動化への応用も含める
-            - セキュリティや効率性も考慮する
-            - 日本語で丁寧に回答する
-
-            回答:
-            """
-            
-            if getattr(self, "_llm", None) and getattr(self._llm, "is_configured", False):
-                state['response'] = await self._llm.generate(python_prompt)
-            else:
-                state['response'] = "申し訳ございません。現在LLMプロバイダが設定されていないため、Python技術指導を提供できません。API設定を確認してください。"
-            
+            state['response'] = await python_mentor.run(
+                self._llm,
+                state['user_query'],
+                state['conversation_history'],
+                state['file_context'],
+            )
         except Exception as e:
             logger.error("python_processing_error", error=str(e))
             state['error'] = str(e)
@@ -232,27 +217,11 @@ class LangGraphService:
     async def _generate_general_response(self, state: ManufacturingState) -> ManufacturingState:
         """Generate general responses"""
         try:
-            context_info = ""
-            if state['conversation_history']:
-                context_info += f"\n\n過去の会話:\n{state['conversation_history']}"
-            
-            general_prompt = f"""
-            以下の質問に対して、親切で丁寧な回答を提供してください：
-
-            質問: {state['user_query']}
-            {context_info}
-
-            製造業とPython技術指導を専門とするAIアシスタントとして、
-            可能であれば専門分野との関連性も含めて回答してください。
-            日本語で回答してください。
-
-            回答:
-            """
-            
-            if getattr(self, "_llm", None) and getattr(self._llm, "is_configured", False):
-                state['response'] = await self._llm.generate(general_prompt)
-            else:
-                state['response'] = f"ご質問ありがとうございます。「{state['user_query']}」についてですが、現在LLMプロバイダが設定されていないため、詳細な回答を提供できません。製造業の改善活動やPython技術についてのご質問でしたら、API設定後により具体的なアドバイスを提供できます。"
+            state['response'] = await general_responder.run(
+                self._llm,
+                state['user_query'],
+                state['conversation_history'],
+            )
         except Exception as e:
             logger.error("general_response_error", error=str(e))
             state['error'] = str(e)
