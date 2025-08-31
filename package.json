@@ -1,0 +1,44 @@
+{
+  "name": "manufacturing-ai-assistant",
+  "version": "1.0.0",
+  "description": "Manufacturing AI Assistant - Docker Environment",
+  "scripts": {
+    "dev": "docker compose up -d",
+    "build": "docker compose build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "docker compose exec backend pytest tests/ -v --cov=app",
+    "test:frontend": "docker compose exec frontend npm test -- --watchAll=false",
+    "test:integration": "./scripts/run_integration_tests.sh",
+    "test:unit": "docker compose exec backend pytest tests/unit/ -v && docker compose exec frontend npm test -- --testPathPattern=unit --watchAll=false",
+    "lint": "docker compose exec backend flake8 app/ && docker compose exec frontend npm run lint",
+    "format": "docker compose exec backend black app/ && docker compose exec frontend npm run format",
+    "docs:build": "docker compose exec backend mkdocs build",
+    "docs:serve": "docker compose exec backend mkdocs serve",
+    "clean": "docker compose down -v && docker system prune -f",
+    "logs": "docker compose logs -f",
+    "logs:backend": "docker compose logs -f backend",
+    "logs:frontend": "docker compose logs -f frontend",
+    "shell:backend": "docker compose exec backend bash",
+    "shell:frontend": "docker compose exec frontend sh",
+    "health": "curl -f http://localhost:8002/api/v1/health && curl -f http://localhost:3002"
+  },
+  "keywords": [
+    "manufacturing",
+    "ai",
+    "chatbot",
+    "fastapi",
+    "react",
+    "langgraph",
+    "docker"
+  ],
+  "author": "Manufacturing Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

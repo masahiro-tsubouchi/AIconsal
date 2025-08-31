@@ -1,0 +1,155 @@
+{
+  "name": "🐳 Manufacturing AI Assistant (Docker)",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // 🐍 Python Configuration
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.flake8Enabled": true,
+        "python.linting.mypyEnabled": true,
+        "python.formatting.provider": "black",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": [
+          "tests",
+          "-v",
+          "--tb=short"
+        ],
+        
+        // 📁 File Management
+        "files.watcherExclude": {
+          "**/__pycache__/**": true,
+          "**/.pytest_cache/**": true,
+          "**/node_modules/**": true,
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true
+        },
+        
+        // 🔧 Editor Settings
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        
+        // 🐳 Docker Integration
+        "docker.host": "unix:///var/run/docker.sock",
+        
+        // ⚛️ TypeScript/React Settings
+        "typescript.preferences.quoteStyle": "single",
+        "typescript.updateImportsOnFileMove.enabled": "always",
+        "emmet.includeLanguages": {
+          "typescript": "html",
+          "typescriptreact": "html"
+        },
+        
+        // 🧪 Testing Configuration
+        "jest.jestCommandLine": "npm test",
+        "jest.autoRun": "off",
+        
+        // 📏 Code Quality
+        "eslint.workingDirectories": ["frontend"],
+        "prettier.configPath": "./frontend/.prettierrc"
+      },
+      
+      "extensions": [
+        // 🐍 Python Development
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "ms-python.mypy-type-checker",
+        "ms-toolsai.jupyter",
+        
+        // ⚛️ Frontend Development
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "es7-react-js-snippets",
+        
+        // 🐳 Docker & DevOps
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+        
+        // 🧪 Testing
+        "ms-vscode.test-adapter-converter",
+        "hbenl.vscode-test-explorer",
+        "orta.vscode-jest",
+        
+        // 🔧 Development Tools
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "ms-vscode.hexeditor",
+        "gruntfuggly.todo-tree",
+        
+        // 🤖 AI Integration
+        "github.copilot",
+        "github.copilot-chat",
+        
+        // 📊 Monitoring & Debugging
+        "ms-vscode.vscode-thunder-client",
+        "humao.rest-client"
+      ]
+    }
+  },
+
+  // 🌐 Port Configuration
+  "forwardPorts": [8002, 3002, 5432, 6379],
+  "portsAttributes": {
+    "8002": {
+      "label": "🚀 FastAPI Backend",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "3002": {
+      "label": "⚛️ React Frontend", 
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
+    "5432": {
+      "label": "🐘 PostgreSQL (Future)",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "📦 Redis (Future)",
+      "onAutoForward": "silent"
+    }
+  },
+
+  // 🔧 Container Lifecycle
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "echo '🐳 Container started. Happy coding!'",
+  
+  // 📂 Volume Mounts
+  "mounts": [
+    "source=${localWorkspaceFolder}/.git,target=/app/.git,type=bind,consistency=cached",
+    "source=manufacturing-ai-node-modules,target=/app/frontend/node_modules,type=volume"
+  ],
+
+  // 👤 User Configuration
+  "remoteUser": "appuser",
+  "updateRemoteUserUID": true,
+  
+  // 🌍 Environment Variables
+  "containerEnv": {
+    "ENVIRONMENT": "development",
+    "DOCKER_BUILDKIT": "1",
+    "COMPOSE_DOCKER_CLI_BUILD": "1"
+  },
+  
+  // ⚙️ Features
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "18"
+    }
+  }
+}

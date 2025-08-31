@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      target: development
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    environment:
+      - GEMINI_API_KEY=AIzaSyBwqb73huwxSuC0tEEMtooogcX0THbm6gE
+      - GEMINI_MODEL=gemini-1.5-flash
+      - GEMINI_FALLBACK_MODEL=gemini-1.5-pro
+      - GEMINI_MAX_RETRIES=3
+      - GEMINI_RETRY_BACKOFF_SECONDS=2.0
+      - DEBUG=true
+      - RELOAD=true
+      - HOST=0.0.0.0
+      - PORT=8002
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8002/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend React service
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8002
+      - REACT_APP_WS_URL=ws://localhost:8002
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=3002
+      - WATCHPACK_POLLING=true
+    networks:
+      - app-network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  node_modules:

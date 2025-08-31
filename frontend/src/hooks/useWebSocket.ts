@@ -1,0 +1,148 @@
+/**
+ * WebSocket Hook for Real-time Chat
+ * Manufacturing AI Assistant Frontend
+ */
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Message, WebSocketMessage } from '../types/api';
+import { apiService } from '../services/api';
+
+interface UseWebSocketProps {
+  sessionId: string;
+  onMessage?: (message: Message) => void;
+  onError?: (error: string) => void;
+  onStatusUpdate?: (status: string) => void;
+}
+
+interface UseWebSocketReturn {
+  socket: WebSocket | null;
+  isConnected: boolean;
+  sendMessage: (message: string) => void;
+  disconnect: () => void;
+}
+
+export const useWebSocket = ({
+  sessionId,
+  onMessage,
+  onError,
+  onStatusUpdate,
+}: UseWebSocketProps): UseWebSocketReturn => {
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const socketRef = useRef<WebSocket | null>(null);
+
+  const sendMessage = useCallback(
+    (message: string) => {
+      if (socketRef.current && isConnected) {
+        socketRef.current.send(message);
+      } else {
+        onError?.('WebSocket not connected');
+      }
+    },
+    [isConnected, onError]
+  );
+
+  const disconnect = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+      setIsConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let reconnectTimeout: NodeJS.Timeout;
+    
+    const connectWebSocket = () => {
+      if (!isMounted) return;
+      
+      const baseUrl = process.env.REACT_APP_WS_URL || process.env.REACT_APP_API_URL || 'http://localhost:8002';
+      const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
+      const wsUrl = baseUrl.replace(/^https?/, wsProtocol);
+      const fullWsUrl = `${wsUrl}/api/v1/chat/ws/${sessionId}`;
+
+      console.log('Creating WebSocket connection to:', fullWsUrl);
+
+      const socket = new WebSocket(fullWsUrl);
+      socketRef.current = socket;
+
+      // Connection event handlers
+      socket.onopen = () => {
+        if (!isMounted) return;
+        console.log('WebSocket connected to:', fullWsUrl);
+        setIsConnected(true);
+        onStatusUpdate?.('Connected');
+      };
+
+      socket.onclose = (event) => {
+        if (!isMounted) return;
+        console.log('WebSocket disconnected:', event.code, event.reason);
+        setIsConnected(false);
+        onStatusUpdate?.('Disconnected');
+        
+        // Don't reconnect if it was a normal closure or if component unmounted
+        if (event.code !== 1000 && event.code !== 1001 && isMounted) {
+          console.log('WebSocket attempting reconnection in 3 seconds...');
+          reconnectTimeout = setTimeout(connectWebSocket, 3000);
+        }
+      };
+
+      socket.onerror = (event) => {
+        if (!isMounted) return;
+        console.error('WebSocket error:', event);
+        setIsConnected(false);
+        onError?.('WebSocket connection error');
+      };
+
+      socket.onmessage = (event) => {
+        if (!isMounted) return;
+        try {
+          console.log('WebSocket message received:', event.data);
+          const responseText = event.data;
+          
+          // Skip connection confirmation messages
+          if (responseText === 'WebSocket接続が確立されました') {
+            return;
+          }
+          
+          // Create message object for UI
+          const message: Message = {
+            id: Date.now().toString(),
+            content: responseText,
+            role: 'assistant',
+            timestamp: new Date().toISOString(),
+            session_id: sessionId,
+          };
+          
+          onMessage?.(message);
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
+          onError?.('Error processing message');
+        }
+      };
+    };
+
+    // Initial connection
+    connectWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      console.log('Cleaning up WebSocket connection');
+      isMounted = false;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (socketRef.current) {
+        socketRef.current.close(1000, 'Component unmounting');
+        socketRef.current = null;
+      }
+    };
+  }, [sessionId, onMessage, onError, onStatusUpdate]);
+
+  return {
+    socket: socketRef.current,
+    isConnected,
+    sendMessage,
+    disconnect,
+  };
+};

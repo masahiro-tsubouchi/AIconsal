@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#3b82f6" />
+    <meta name="description" content="製造業向けAI アシスタント - 改善活動コンサルティングとPython技術指導" />
+    <!-- Removed apple-touch-icon logo192.png to avoid 404; use favicon only -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Preconnect to fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Meta tags for PWA -->
+    <meta name="application-name" content="製造業AI アシスタント" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="製造業AI アシスタント" />
+    
+    <!-- Security headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    
+    <title>製造業AI アシスタント</title>
+  </head>
+  <body>
+    <noscript>
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        font-family: Inter, system-ui, sans-serif;
+        text-align: center;
+        padding: 20px;
+        background-color: #f8fafc;
+      ">
+        <div>
+          <h1 style="color: #1f2937; margin-bottom: 16px;">JavaScript が必要です</h1>
+          <p style="color: #6b7280; line-height: 1.5;">
+            製造業AI アシスタントを使用するには、ブラウザでJavaScriptを有効にしてください。<br>
+            JavaScript is required to run the Manufacturing AI Assistant.
+          </p>
+        </div>
+      </div>
+    </noscript>
+    
+    <!-- React root -->
+    <div id="root"></div>
+    
+    <!-- Loading fallback -->
+    <div id="loading-fallback" style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #f8fafc;
+      z-index: 9999;
+    ">
+      <div style="text-align: center;">
+        <div style="
+          width: 40px;
+          height: 40px;
+          border: 3px solid #e5e7eb;
+          border-top: 3px solid #3b82f6;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 16px;
+        "></div>
+        <p style="color: #6b7280; font-family: Inter, system-ui, sans-serif;">
+          読み込み中...
+        </p>
+      </div>
+    </div>
+    
+    <style>
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Hide loading fallback when React loads */
+      .loaded #loading-fallback {
+        display: none !important; /* override inline display:flex */
+      }
+    </style>
+    
+    <script>
+      // Hide loading fallback robustly
+      (function () {
+        const hide = function () {
+          if (!document.body.classList.contains('loaded')) {
+            document.body.classList.add('loaded');
+          }
+        };
+        if (document.readyState === 'interactive' || document.readyState === 'complete') {
+          // DOM is already parsed
+          setTimeout(hide, 0);
+        } else {
+          document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(hide, 0);
+          });
+        }
+        // Safety: ensure hide even if event didn't fire
+        setTimeout(hide, 1000);
+      })();
+    </script>
+  </body>
+</html>
