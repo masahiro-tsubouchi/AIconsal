@@ -1,0 +1,111 @@
+# Root .gitignore for FastAPI (Python) + React (Node) monorepo
+# -------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Editors / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Python - bytecode, caches, venvs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.pylintrc.local
+.python-version
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.cache/
+.ipynb_checkpoints/
+
+# Python - packaging / distribution
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Python - coverage / test artifacts
+.coverage*
+coverage.xml
+htmlcov/
+.junit/
+.pybuilder/
+
+# Environment files (root + backend + frontend)
+.env
+.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+
+# Logs
+*.log
+logs/
+
+# Node / React
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+# Lockfiles (allow one canonical lock if desired; uncomment to ignore all)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Frontend tooling caches
+.npm/
+.pnpm-store/
+.yarn/
+.yarn/cache/
+.eslintcache
+.stylelintcache
+
+# Next.js / Vite (in case of tooling changes)
+.next/
+.out/
+.vite/
+
+# Docker / Compose
+# Ignore local-only artifacts; keep docker-compose.yml tracked
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+*.sqlite3
+*.db
+*.db-journal
+
+# Local configs & secrets
+*.local.*
+*.secret.*
+secrets.*
+
+# Images/artifacts generated temporarily (keep docs assets tracked)
+# docs/graph.mmd
+# docs/graph.png
+
+# Misc
+Thumbs.db
+.svn/
+.nyc_output/
+.tmp/
+.tmp*/
+~$*
+*.swp
+*.swo

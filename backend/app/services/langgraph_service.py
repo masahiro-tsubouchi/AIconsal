@@ -1,33 +1,42 @@
 """LangGraph service for AI workflow management"""
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict, Annotated
 from typing_extensions import NotRequired
 import structlog
 from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
 
 from app.core.config import get_settings
 from app.services.llm.base import LLMProvider
 from app.services.llm.gemini import GeminiProvider
-from app.services.tools import detect_tool_request, execute_tool
+from app.services.tools import detect_tool_request, async_execute_tool
 from app.services.agents import (
     manufacturing_advisor,
     python_mentor,
     general_responder,
 )
+from app.services.agents.registry import get_agent
 
 logger = structlog.get_logger()
 
 
-class ManufacturingState(TypedDict):
-    """State for manufacturing AI workflow"""
+class WorkflowState(TypedDict):
+    """State for AI workflow"""
     user_query: str
     conversation_history: str
     file_context: str
     query_type: str
     response: str
     error: Optional[str]
+    # Correlation identifiers (optional)
+    thread_id: NotRequired[Optional[str]]
     # Future tools support (optional)
     tool_name: NotRequired[Optional[str]]
     tool_input: NotRequired[Optional[str]]
+    # Messages with reducer (best practice). We keep string history for now.
+    messages: NotRequired[Annotated[List[dict], add_messages]]
+
+# Backward-compat alias during naming migration
+ManufacturingState = WorkflowState
 
 
 class LangGraphService:
@@ -40,7 +49,7 @@ class LangGraphService:
     
     def _build_workflow(self) -> StateGraph:
         """Build the LangGraph workflow"""
-        workflow = StateGraph(ManufacturingState)
+        workflow = StateGraph(WorkflowState)
         
         # Add nodes
         workflow.add_node("analyze_query", self._analyze_query)
@@ -70,67 +79,106 @@ class LangGraphService:
         workflow.add_edge("general_response", END)
         workflow.add_edge("process_tool", END)
         
-        return workflow.compile()
+        # Compile the workflow, optionally with a checkpointer for durable execution
+        if getattr(self._settings, "enable_checkpointer", False):
+            try:
+                from langgraph.checkpoint.memory import MemorySaver  # lazy import
+                checkpointer = MemorySaver()
+                return workflow.compile(checkpointer=checkpointer)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("checkpointer_compile_failed", error=str(e))
+                return workflow.compile()
+        else:
+            return workflow.compile()
 
     def export_mermaid(self) -> str:
         """Export the current workflow as a Mermaid flowchart (text).
 
-        Note: This mirrors the nodes/edges defined in _build_workflow(). Keep in sync if the
-        workflow topology changes.
+        Prefer LangGraph's built-in renderer to avoid drift with the compiled graph.
+        Falls back to the manual definition for backward compatibility.
         """
-        lines = [
-            "flowchart TD",
-            "  analyze_query[Analyze Query]",
-            "  process_manufacturing[Manufacturing Advisor]",
-            "  process_python[Python Mentor]",
-            "  general_response[General Response]",
-            "  process_tool[Tool Executor]",
-            "  END((END))",
-            # Conditional edges from analyze_query
-            "  analyze_query -- manufacturing --> process_manufacturing",
-            "  analyze_query -- python --> process_python",
-            "  analyze_query -- general --> general_response",
-            "  analyze_query -- tool --> process_tool",
-            # Terminal edges
-            "  process_manufacturing --> END",
-            "  process_python --> END",
-            "  general_response --> END",
-            "  process_tool --> END",
-        ]
-        return "\n".join(lines)
+        try:
+            # Built-in (recommended): reflects the actual compiled graph
+            return self._workflow.get_graph().draw_mermaid()
+        except Exception:
+            # Fallback: manual definition (kept for backward compatibility)
+            lines = [
+                "flowchart TD",
+                "  analyze_query[Analyze Query]",
+                "  process_manufacturing[Manufacturing Advisor]",
+                "  process_python[Python Mentor]",
+                "  general_response[General Response]",
+                "  process_tool[Tool Executor]",
+                "  END((END))",
+                # Conditional edges from analyze_query
+                "  analyze_query -- manufacturing --> process_manufacturing",
+                "  analyze_query -- python --> process_python",
+                "  analyze_query -- general --> general_response",
+                "  analyze_query -- tool --> process_tool",
+                # Terminal edges
+                "  process_manufacturing --> END",
+                "  process_python --> END",
+                "  general_response --> END",
+                "  process_tool --> END",
+            ]
+            return "\n".join(lines)
+
+    def export_mermaid_png(self) -> bytes:
+        """Export the current workflow as a PNG image (bytes).
+
+        Uses LangGraph's built-in PNG renderer. If this fails (e.g., missing optional
+        deps), callers should handle the exception and use an external renderer.
+        """
+        try:
+            return self._workflow.get_graph().draw_mermaid_png()
+        except Exception as e:  # noqa: BLE001
+            logger.error("export_mermaid_png_failed", error=str(e))
+            raise
     
     async def process_manufacturing_query(
-        self, 
-        query: str, 
-        context: str = "", 
-        file_context: str = ""
+        self,
+        query: str,
+        context: str = "",
+        file_context: str = "",
+        thread_id: Optional[str] = None,
     ) -> str:
         """Process a manufacturing-related query"""
         try:
-            initial_state = ManufacturingState(
+            log = logger.bind(thread_id=thread_id)
+            initial_state = WorkflowState(
                 user_query=query,
                 conversation_history=context,
                 file_context=file_context,
                 query_type="",
                 response="",
-                error=None
+                error=None,
+                thread_id=thread_id,
             )
             
-            result = await self._workflow.ainvoke(initial_state)
+            # If durable execution enabled and thread_id provided, pass it in config
+            if getattr(self._settings, "enable_checkpointer", False) and thread_id:
+                result = await self._workflow.ainvoke(
+                    initial_state,
+                    config={"configurable": {"thread_id": thread_id}},
+                )
+            else:
+                result = await self._workflow.ainvoke(initial_state)
             
             if result.get("error"):
-                logger.error("workflow_error", error=result["error"])
+                log.error("workflow_error", error=result["error"])
                 return "申し訳ございません。処理中にエラーが発生しました。"
             
             return result.get("response", "回答を生成できませんでした。")
             
         except Exception as e:
-            logger.error("langgraph_processing_error", error=str(e))
+            log = logger.bind(thread_id=thread_id)
+            log.error("langgraph_processing_error", error=str(e))
             return "システムエラーが発生しました。しばらく時間をおいてお試しください。"
     
-    async def _analyze_query(self, state: ManufacturingState) -> ManufacturingState:
+    async def _analyze_query(self, state: WorkflowState) -> WorkflowState:
         """Analyze user query to determine type"""
         try:
+            log = logger.bind(thread_id=state.get('thread_id'))
             analysis_prompt = f"""
             以下のユーザーの質問を分析し、カテゴリを判定してください：
 
@@ -150,7 +198,7 @@ class LangGraphService:
                 state['query_type'] = "tool"
                 state['tool_name'] = tool_name
                 state['tool_input'] = tool_arg
-                logger.info("query_analyzed_tool", tool=tool_name)
+                log.info("query_analyzed_tool", tool=tool_name)
                 return state
 
             if getattr(self, "_llm", None) and getattr(self._llm, "is_configured", False):
@@ -172,76 +220,117 @@ class LangGraphService:
                     query_type = "general"
             
             state['query_type'] = query_type
-            logger.info("query_analyzed", query_type=query_type)
+            log.info("query_analyzed", query_type=query_type)
             
         except Exception as e:
-            logger.error("query_analysis_error", error=str(e))
+            log.error("query_analysis_error", error=str(e))
             state['query_type'] = "general"
         
         return state
     
-    def _route_query(self, state: ManufacturingState) -> str:
+    def _route_query(self, state: WorkflowState) -> str:
         """Route query to appropriate handler"""
         return state['query_type']
     
-    async def _process_manufacturing_query(self, state: ManufacturingState) -> ManufacturingState:
+    async def _process_manufacturing_query(self, state: WorkflowState) -> WorkflowState:
         """Process manufacturing-related queries"""
         try:
-            state['response'] = await manufacturing_advisor.run(
+            log = logger.bind(thread_id=state.get('thread_id'), agent="manufacturing")
+            agent = get_agent("manufacturing") or manufacturing_advisor.run
+            state['response'] = await agent(
                 self._llm,
                 state['user_query'],
                 state['conversation_history'],
                 state['file_context'],
             )
+            # Append messages via reducer: user + assistant
+            state['messages'] = [
+                {"role": "user", "content": state['user_query']},
+                {"role": "assistant", "content": state['response']},
+            ]
+            log.info("agent_completed")
         except Exception as e:
-            logger.error("manufacturing_processing_error", error=str(e))
+            log.error("manufacturing_processing_error", error=str(e))
             state['error'] = str(e)
         
         return state
     
-    async def _process_python_query(self, state: ManufacturingState) -> ManufacturingState:
+    async def _process_python_query(self, state: WorkflowState) -> WorkflowState:
         """Process Python-related queries"""
         try:
-            state['response'] = await python_mentor.run(
+            log = logger.bind(thread_id=state.get('thread_id'), agent="python")
+            agent = get_agent("python") or python_mentor.run
+            state['response'] = await agent(
                 self._llm,
                 state['user_query'],
                 state['conversation_history'],
                 state['file_context'],
             )
+            state['messages'] = [
+                {"role": "user", "content": state['user_query']},
+                {"role": "assistant", "content": state['response']},
+            ]
+            log.info("agent_completed")
         except Exception as e:
-            logger.error("python_processing_error", error=str(e))
+            log.error("python_processing_error", error=str(e))
             state['error'] = str(e)
         
         return state
     
-    async def _generate_general_response(self, state: ManufacturingState) -> ManufacturingState:
+    async def _generate_general_response(self, state: WorkflowState) -> WorkflowState:
         """Generate general responses"""
         try:
-            state['response'] = await general_responder.run(
+            log = logger.bind(thread_id=state.get('thread_id'), agent="general")
+            agent = get_agent("general") or general_responder.run
+            state['response'] = await agent(
                 self._llm,
                 state['user_query'],
                 state['conversation_history'],
+                state.get('file_context', ""),
             )
+            state['messages'] = [
+                {"role": "user", "content": state['user_query']},
+                {"role": "assistant", "content": state['response']},
+            ]
+            log.info("agent_completed")
         except Exception as e:
-            logger.error("general_response_error", error=str(e))
+            log.error("general_response_error", error=str(e))
             state['error'] = str(e)
             
         return state
 
-    async def _process_tool_query(self, state: ManufacturingState) -> ManufacturingState:
+    async def _process_tool_query(self, state: WorkflowState) -> WorkflowState:
         """Execute simple tool actions (scaffold for future tools)."""
         try:
+            log = logger.bind(thread_id=state.get('thread_id'))
             tool = state.get('tool_name')
             arg = state.get('tool_input') or state['user_query']
             if not tool:
                 # Detect again defensively
                 tool, arg = detect_tool_request(state['user_query'])
             if tool:
-                result = execute_tool(tool, arg or "")
-                state['response'] = f"[tool:{tool}] 実行結果:\n{result}"
+                log = log.bind(tool=tool)
+                tr = await async_execute_tool(tool, (arg or ""), timeout_s=5.0)
+                if tr.error:
+                    state['response'] = (
+                        f"[tool:{tr.tool}] エラー: {tr.error} (took {tr.took_ms}ms)"
+                    )
+                else:
+                    took = f" (took {tr.took_ms}ms)" if tr.took_ms is not None else ""
+                    state['response'] = f"[tool:{tr.tool}] 実行結果{took}:\n{tr.output}"
+                state['messages'] = [
+                    {"role": "user", "content": state['user_query']},
+                    {"role": "assistant", "content": state['response']},
+                ]
+                log.info("tool_executed", took_ms=tr.took_ms, error=tr.error is not None)
             else:
                 state['response'] = "ツール実行リクエストを認識できませんでした。"
+                state['messages'] = [
+                    {"role": "user", "content": state['user_query']},
+                    {"role": "assistant", "content": state['response']},
+                ]
+                log.info("tool_not_recognized")
         except Exception as e:
-            logger.error("tool_processing_error", error=str(e))
+            log.error("tool_processing_error", error=str(e))
             state['error'] = str(e)
         return state

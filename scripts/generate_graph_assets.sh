@@ -27,8 +27,21 @@ if [ ! -s "$MERMAID_FILE" ]; then
 fi
 
 echo "[2/2] Rendering PNG to $PNG_FILE ..."
-# Ensure render script is executable when run directly with bash/sh as well
-sh "$REPO_ROOT/scripts/render_graph_png.sh"
+# Try built-in LangGraph renderer first (inside backend container)
+set +e
+docker compose exec -T backend python - <<'PY' > "$PNG_FILE"
+from app.services.langgraph_service import LangGraphService
+import sys
+sys.stdout.buffer.write(LangGraphService().export_mermaid_png())
+PY
+STATUS=$?
+set -e
+
+if [ $STATUS -ne 0 ] || [ ! -s "$PNG_FILE" ]; then
+  echo "Built-in PNG renderer failed or produced empty file. Falling back to Mermaid CLI ..." >&2
+  # Ensure render script is executable when run directly with bash/sh as well
+  sh "$REPO_ROOT/scripts/render_graph_png.sh"
+fi
 
 if [ -f "$PNG_FILE" ]; then
   echo "✅ Done:\n  - Mermaid: $MERMAID_FILE\n  - PNG    : $PNG_FILE"

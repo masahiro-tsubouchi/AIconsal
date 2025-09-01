@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-for-jwt-tokens"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+
+    # LangGraph Durable Execution (optional)
+    enable_checkpointer: bool = False
     
     model_config = {
         "env_file": ["/app/.env"],

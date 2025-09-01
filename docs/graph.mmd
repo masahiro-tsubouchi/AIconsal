@@ -1,15 +1,26 @@
-flowchart TD
-  analyze_query[Analyze Query]
-  process_manufacturing[Manufacturing Advisor]
-  process_python[Python Mentor]
-  general_response[General Response]
-  process_tool[Tool Executor]
-  END((END))
-  analyze_query -- manufacturing --> process_manufacturing
-  analyze_query -- python --> process_python
-  analyze_query -- general --> general_response
-  analyze_query -- tool --> process_tool
-  process_manufacturing --> END
-  process_python --> END
-  general_response --> END
-  process_tool --> END
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	analyze_query(analyze_query)
+	process_manufacturing(process_manufacturing)
+	process_python(process_python)
+	general_response(general_response)
+	process_tool(process_tool)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> analyze_query;
+	analyze_query -. &nbsp;general&nbsp; .-> general_response;
+	analyze_query -. &nbsp;manufacturing&nbsp; .-> process_manufacturing;
+	analyze_query -. &nbsp;python&nbsp; .-> process_python;
+	analyze_query -. &nbsp;tool&nbsp; .-> process_tool;
+	general_response --> __end__;
+	process_manufacturing --> __end__;
+	process_python --> __end__;
+	process_tool --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+

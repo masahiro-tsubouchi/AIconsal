@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Backend API service
   backend:
@@ -12,7 +10,6 @@ services:
       - ./backend:/app
       - /app/__pycache__
     environment:
-      - GEMINI_API_KEY=AIzaSyBwqb73huwxSuC0tEEMtooogcX0THbm6gE
       - GEMINI_MODEL=gemini-1.5-flash
       - GEMINI_FALLBACK_MODEL=gemini-1.5-pro
       - GEMINI_MAX_RETRIES=3

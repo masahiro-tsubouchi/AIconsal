@@ -63,7 +63,8 @@ class ChatService:
             response = await self._langgraph_service.process_manufacturing_query(
                 query=message,
                 context=conversation_history,
-                file_context=file_context
+                file_context=file_context,
+                thread_id=session_id,
             )
             
             logger.info(

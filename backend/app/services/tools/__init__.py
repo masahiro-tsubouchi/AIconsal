@@ -7,9 +7,10 @@ continue to work.
 from __future__ import annotations
 
 from .detect import detect_tool_request
-from .registry import execute_tool
+from .registry import execute_tool, async_execute_tool
 
 __all__ = [
     "detect_tool_request",
     "execute_tool",
+    "async_execute_tool",
 ]

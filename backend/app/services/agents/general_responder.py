@@ -14,10 +14,13 @@ async def run(
     llm: Optional[LLMProvider],
     user_query: str,
     conversation_history: str = "",
+    file_context: str = "",
 ) -> str:
     context_info = ""
     if conversation_history:
         context_info += f"\n\n過去の会話:\n{conversation_history}"
+    if file_context:
+        context_info += f"\n\n関連ファイル:\n{file_context}"
 
     prompt = f"""
     以下の質問に対して、親切で丁寧な回答を提供してください：
