@@ -73,3 +73,30 @@ async def test_correlation_ids_in_tool_logs():
         e.get("event") == "tool_executed" and e.get("thread_id") == "tid-2" and e.get("tool") == "web"
         for e in cap
     )
+
+
+@pytest.mark.asyncio
+async def test_tool_not_recognized_logs_have_thread_id():
+    # Generic tool prefix without a known subtool should route to tool handler
+    # and produce a 'tool_not_recognized' log with thread correlation.
+    llm = StubLLMProvider([])
+    service = lgs.LangGraphService(llm_provider=llm)
+
+    with capture_logs() as cap:
+        out = await service.process_manufacturing_query(
+            query="tool: just a generic prefix",
+            context="",
+            file_context="",
+            thread_id="tid-3",
+        )
+
+    assert isinstance(out, str)
+    assert any(
+        e.get("event") == "query_analyzed_tool" and e.get("thread_id") == "tid-3" and e.get("tool") == "unknown"
+        for e in cap
+    )
+    assert any(
+        e.get("event") == "tool_not_recognized" and e.get("thread_id") == "tid-3"
+        for e in cap
+    )
+    assert "ツール実行リクエストを認識できませんでした" in out

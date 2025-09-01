@@ -177,6 +177,14 @@ LangGraphChatBot/
 - **ボリュームマウント**: ホットリロード対応
 - **ネットワーク**: プライベートネットワーク構成
 - **ヘルスチェック**: 自動サービス監視
+  
+補足: `docker-compose.yml` の `backend.environment` に **コメントアウトされた例** を追加しています。
+耐障害性を有効化したい場合は以下を設定してください。
+
+```yaml
+# To enable durable execution with LangGraph checkpointer, set:
+# - ENABLE_CHECKPOINTER=true
+```
 
 ### 環境変数
 
@@ -198,6 +206,12 @@ UPLOAD_DIR=/tmp/uploads
 
 # Session Management
 SESSION_TIMEOUT=3600
+
+# Durable Execution (optional)
+# LangGraph のチェックポインタ（MemorySaver）を有効化すると、
+# 長時間処理・再開・失敗復帰に強い実行が可能になります。
+# Settings.enable_checkpointer に対応します。
+ENABLE_CHECKPOINTER=false
 ```
 
 #### フロントエンド (.env)

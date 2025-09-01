@@ -18,6 +18,8 @@ services:
       - RELOAD=true
       - HOST=0.0.0.0
       - PORT=8002
+      # To enable durable execution with LangGraph checkpointer, set:
+      # - ENABLE_CHECKPOINTER=true
     networks:
       - app-network
     healthcheck:

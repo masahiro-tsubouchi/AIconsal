@@ -1,7 +1,5 @@
 """Chat service for handling conversation logic"""
-import time
 from typing import List, Optional
-from uuid import uuid4
 import structlog
 
 from app.models.chat import ChatMessage, ChatHistory, SessionInfo

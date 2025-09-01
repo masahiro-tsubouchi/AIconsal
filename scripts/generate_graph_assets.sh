@@ -27,14 +27,19 @@ if [ ! -s "$MERMAID_FILE" ]; then
 fi
 
 echo "[2/2] Rendering PNG to $PNG_FILE ..."
-# Try built-in LangGraph renderer first (inside backend container)
+# Try built-in LangGraph renderer first (inside backend container), unless forced to fallback
 set +e
-docker compose exec -T backend python - <<'PY' > "$PNG_FILE"
+if [ "${FORCE_PNG_FALLBACK:-0}" = "1" ]; then
+  echo "FORCE_PNG_FALLBACK=1 が設定されています。ビルトインレンダラをスキップし、Mermaid CLI へフォールバックします。" >&2
+  STATUS=1
+else
+  docker compose exec -T backend python - <<'PY' > "$PNG_FILE"
 from app.services.langgraph_service import LangGraphService
 import sys
 sys.stdout.buffer.write(LangGraphService().export_mermaid_png())
 PY
-STATUS=$?
+  STATUS=$?
+fi
 set -e
 
 if [ $STATUS -ne 0 ] || [ ! -s "$PNG_FILE" ]; then

@@ -201,6 +201,16 @@ class LangGraphService:
                 log.info("query_analyzed_tool", tool=tool_name)
                 return state
 
+            # Generic "tool:" prefix (no known subtool): still route to tool handler
+            raw = state['user_query'].strip().lower()
+            if raw.startswith("tool:"):
+                state['query_type'] = "tool"
+                # Keep tool_name unset; pass the raw argument after 'tool:'
+                state['tool_name'] = None
+                state['tool_input'] = state['user_query'][5:].strip()
+                log.info("query_analyzed_tool", tool="unknown")
+                return state
+
             if getattr(self, "_llm", None) and getattr(self._llm, "is_configured", False):
                 text = await self._llm.generate(analysis_prompt)
                 query_type = text.strip().lower()
