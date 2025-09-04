@@ -11,12 +11,7 @@ from app.core.config import get_settings
 from app.services.llm.base import LLMProvider
 from app.services.llm.gemini import GeminiProvider
 from app.services.tools import detect_tool_request, async_execute_tool
-from app.services.agents import (
-    manufacturing_advisor,
-    python_mentor,
-    general_responder,
-)
-from app.services.agents.registry import get_agent, get_agent_v2
+from app.services.agents.registry import get_agent_v2
 from app.services.agents.types import AgentInput
 
 logger = structlog.get_logger()
@@ -332,7 +327,11 @@ class LangGraphService:
         try:
             log = logger.bind(thread_id=state.get('thread_id'), agent="manufacturing")
             agent_v2 = get_agent_v2("manufacturing")
-            if agent_v2 is not None:
+            if agent_v2 is None:
+                log.error("agent_missing", agent="manufacturing")
+                state['error'] = "agent_not_registered"
+                state['response'] = "エージェントが登録されていません。"
+            else:
                 inp = AgentInput(
                     user_query=state['user_query'],
                     conversation_history=state['conversation_history'],
@@ -340,16 +339,6 @@ class LangGraphService:
                 )
                 out = await agent_v2(self._llm, inp)
                 state['response'] = out.content
-            else:
-                # Warn: using legacy agent interface (v1)
-                log.warning("agent_v1_fallback_used")
-                agent = get_agent("manufacturing") or manufacturing_advisor.run
-                state['response'] = await agent(
-                    self._llm,
-                    state['user_query'],
-                    state['conversation_history'],
-                    state['file_context'],
-                )
             # Append messages via reducer: user + assistant
             state['messages'] = [
                 {"role": "user", "content": state['user_query']},
@@ -367,7 +356,11 @@ class LangGraphService:
         try:
             log = logger.bind(thread_id=state.get('thread_id'), agent="python")
             agent_v2 = get_agent_v2("python")
-            if agent_v2 is not None:
+            if agent_v2 is None:
+                log.error("agent_missing", agent="python")
+                state['error'] = "agent_not_registered"
+                state['response'] = "エージェントが登録されていません。"
+            else:
                 inp = AgentInput(
                     user_query=state['user_query'],
                     conversation_history=state['conversation_history'],
@@ -375,16 +368,6 @@ class LangGraphService:
                 )
                 out = await agent_v2(self._llm, inp)
                 state['response'] = out.content
-            else:
-                # Warn: using legacy agent interface (v1)
-                log.warning("agent_v1_fallback_used")
-                agent = get_agent("python") or python_mentor.run
-                state['response'] = await agent(
-                    self._llm,
-                    state['user_query'],
-                    state['conversation_history'],
-                    state['file_context'],
-                )
             state['messages'] = [
                 {"role": "user", "content": state['user_query']},
                 {"role": "assistant", "content": state['response']},
@@ -402,7 +385,11 @@ class LangGraphService:
             log = logger.bind(thread_id=state.get('thread_id'), agent="general")
             # Prefer v2 structured I/O if available (staged rollout)
             agent_v2 = get_agent_v2("general")
-            if agent_v2 is not None:
+            if agent_v2 is None:
+                log.error("agent_missing", agent="general")
+                state['error'] = "agent_not_registered"
+                state['response'] = "エージェントが登録されていません。"
+            else:
                 inp = AgentInput(
                     user_query=state['user_query'],
                     conversation_history=state['conversation_history'],
@@ -410,16 +397,6 @@ class LangGraphService:
                 )
                 out = await agent_v2(self._llm, inp)
                 state['response'] = out.content
-            else:
-                # Warn: using legacy agent interface (v1)
-                log.warning("agent_v1_fallback_used")
-                agent = get_agent("general") or general_responder.run
-                state['response'] = await agent(
-                    self._llm,
-                    state['user_query'],
-                    state['conversation_history'],
-                    state.get('file_context', ""),
-                )
             state['messages'] = [
                 {"role": "user", "content": state['user_query']},
                 {"role": "assistant", "content": state['response']},

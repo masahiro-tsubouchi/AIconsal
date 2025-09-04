@@ -1,9 +1,9 @@
 # 🐳 システムアーキテクチャ設計書 (Docker環境)
 
 > **プロジェクト**: Manufacturing AI Assistant  
-> **バージョン**: 1.0.0  
+> **バージョン**: 1.1.0  
 > **作成日**: 2025-08-30  
-> **更新日**: 2025-08-30  
+> **更新日**: 2025-09-04  
 > **技術スタック**: FastAPI + React + LangGraph + Gemini API  
 > **インフラ**: Docker + Docker Compose + DevContainer
 
@@ -64,7 +64,7 @@ POST /api/v1/chat          # チャット送信
 GET  /api/v1/chat/history  # 会話履歴取得
 POST /api/v1/files/upload  # ファイルアップロード
 GET  /api/v1/health        # ヘルスチェック
-WS   /api/v1/ws/chat       # WebSocket接続
+WS   /api/v1/chat/ws/{session_id}  # WebSocket接続
 ```
 
 ### 2.2 データモデル設計
@@ -111,8 +111,9 @@ backend/
 │   │   └── files.py
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── chat_service.py  # チャットロジック
-│   │   ├── file_service.py  # ファイル処理
+│   │   ├── agents/              # エージェント実装（V2専用）+ registry
+│   │   ├── chat_service.py      # チャットロジック
+│   │   ├── file_service.py      # ファイル処理
 │   │   └── langgraph_service.py # LangGraph連携
 │   └── tests/
 │       ├── __init__.py
@@ -221,20 +222,52 @@ workflow.add_edge("analyze", "process_files")
 workflow.add_edge("process_files", "generate")
 ```
 
-### 4.2 エージェント設計
+### 4.2 エージェントI/F（V2専用）
+V2 の構造化I/Oに統一されています。各エージェントは `run_v2(AgentInput) -> AgentOutput`（async）を実装し、レジストリから解決して利用します。
+
 ```python
-# 製造業専門エージェント
-class ManufacturingAgent:
-    def __init__(self):
-        self.tools = [
-            "process_improvement_advisor",  # 改善活動アドバイザー
-            "python_tutor",                # Python指導
-            "file_analyzer"                # ファイル解析
-        ]
-    
-    async def process_query(self, query: str, context: str) -> str:
-        # 専門知識を活用した回答生成
-        pass
+# backend/app/services/agents/types.py（抜粋）
+from pydantic import BaseModel
+from typing import Optional, List, Dict
+
+class AgentInput(BaseModel):
+    session_id: str
+    user_query: str
+    messages: List[Dict] = []
+    file_context: Optional[str] = None
+    debug: bool = False
+
+class AgentOutput(BaseModel):
+    content: str
+    display_header: Optional[str] = None
+    selected_tool: Optional[str] = None
+    decision_trace: Optional[Dict] = None
+
+# 各エージェントは次の署名を満たします（例: manufacturing_advisor.run_v2）
+# async def run_v2(inp: AgentInput) -> AgentOutput: ...
+```
+
+```python
+# backend/app/services/agents/registry.py（抜粋）
+_REGISTRY_V2 = {
+    "general": general_responder.run_v2,
+    "python": python_mentor.run_v2,
+    "manufacturing": manufacturing_advisor.run_v2,
+}
+
+def get_agent_v2(name: str):
+    return _REGISTRY_V2.get(name)
+```
+
+```python
+# 利用例（langgraph_service から）
+from backend.app.services.agents.registry import get_agent_v2
+from backend.app.services.agents.types import AgentInput
+
+agent_fn = get_agent_v2("manufacturing")
+assert agent_fn is not None
+result = await agent_fn(AgentInput(session_id=sid, user_query=question))
+# result は AgentOutput
 ```
 
 ## 5. 外部API連携

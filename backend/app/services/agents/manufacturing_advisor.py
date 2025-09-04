@@ -53,23 +53,4 @@ async def run_v2(llm: Optional[LLMProvider], inp: AgentInput) -> AgentOutput:
     except Exception as e:  # noqa: BLE001
         log.error("agent_error", error=str(e))
         return AgentOutput(content="回答の生成中にエラーが発生しました。", error=str(e))
-
-
-async def run(
-    llm: Optional[LLMProvider],
-    user_query: str,
-    conversation_history: str = "",
-    file_context: str = "",
-) -> str:
-    """Legacy wrapper: call run_v2 and return content str."""
-    # Deprecation notice: prefer run_v2(AgentInput)->AgentOutput
-    logger.warning("agent_legacy_run_deprecated", agent="manufacturing")
-    out = await run_v2(
-        llm,
-        AgentInput(
-            user_query=user_query,
-            conversation_history=conversation_history,
-            file_context=file_context,
-        ),
-    )
-    return out.content
+ # V2-only migration: legacy run() wrapper removed. Use run_v2().

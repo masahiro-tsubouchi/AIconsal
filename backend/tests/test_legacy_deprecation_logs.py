@@ -1,6 +1,8 @@
 import pytest
 from structlog.testing import capture_logs
 
+pytestmark = pytest.mark.skip(reason="V2-only migration: legacy interface and fallback removed")
+
 import app.services.agents.general_responder as gen
 import app.services.agents.python_mentor as pym
 import app.services.agents.manufacturing_advisor as man

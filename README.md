@@ -159,6 +159,13 @@ docker compose run --rm -e CI=true frontend npm test -- --watchAll=false
 ```
 ※ 新規 UI テストでは、デバッグモード時に `[DEBUG]` ヘッダーが UI 上で強調表示されることを検証しています。
 
+#### CI（GitHub Actions）
+- `.github/workflows/ci.yml` にて Docker ベースで CI を実行します。
+- バックエンド: `pytest` + カバレッジ（閾値 >= 80%）
+- フロントエンド: Jest + カバレッジ
+- グラフエクスポート: LangGraph の `draw_mermaid()` を利用し Mermaid/PNG を生成（Docker Mermaid CLI へフォールバック）
+- すべてのCIタスクは Docker 上で完結するため、ローカル環境差分の影響を受けにくい構成です。
+
 ### 統合テスト
 ```bash
 # 全サービス起動後の統合テスト
@@ -304,6 +311,25 @@ PORT=3002
 1. **クエリ分析** - 質問内容の分類（製造業/Python/一般）
 2. **コンテキスト処理** - ファイル内容・会話履歴の統合
 3. **専門応答生成** - 分野別の最適化された回答生成
+
+### エージェントI/F（V2専用）
+- エージェントは V2 の構造化I/Oに統一されています。
+- 署名: `run_v2(AgentInput) -> AgentOutput`（async）
+- レジストリ: `backend/app/services/agents/registry.py` は V2 のみ公開し、`get_agent_v2(name)` で取得します。
+- 登録済み: `general` / `python` / `manufacturing`（各エージェントが `run_v2` を実装）
+
+参考（抜粋）:
+```python
+# backend/app/services/agents/registry.py
+_REGISTRY_V2 = {
+    "general": general_responder.run_v2,
+    "python": python_mentor.run_v2,
+    "manufacturing": manufacturing_advisor.run_v2,
+}
+
+def get_agent_v2(name: str):
+    return _REGISTRY_V2.get(name)
+```
 
 ### 対応ファイル形式
 - PDF (.pdf) - テキスト抽出

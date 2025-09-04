@@ -7,16 +7,11 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from .types import AgentFn, AgentFnV2
+from .types import AgentFnV2
 from . import manufacturing_advisor, python_mentor, general_responder
 
 
-_REGISTRY: Dict[str, AgentFn] = {
-    # Logical names align with routing keys used in LangGraphService
-    "manufacturing": manufacturing_advisor.run,
-    "python": python_mentor.run,
-    "general": general_responder.run,
-}
+# V2-only: legacy registry removed. All agents must implement run_v2.
 
 
 # Optional v2 registry for structured I/O (AgentInput/AgentOutput)
@@ -28,11 +23,6 @@ _REGISTRY_V2: Dict[str, AgentFnV2] = {
 }
 
 
-def get_agent(name: str) -> Optional[AgentFn]:
-    """Return the registered agent function by name, if any."""
-    return _REGISTRY.get(name)
-
-
 def get_agent_v2(name: str) -> Optional[AgentFnV2]:
     """Return the v2 (structured I/O) agent function by name, if any.
 
@@ -41,4 +31,4 @@ def get_agent_v2(name: str) -> Optional[AgentFnV2]:
     return _REGISTRY_V2.get(name)
 
 
-__all__ = ["get_agent", "get_agent_v2"]
+__all__ = ["get_agent_v2"]
