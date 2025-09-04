@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # LangGraph Durable Execution (optional)
     enable_checkpointer: bool = False
     
+    # Timeouts
+    llm_generate_timeout_seconds: float = 30.0
+    workflow_invoke_timeout_seconds: float = 60.0
+    
     model_config = {
         "env_file": ["/app/.env"],
         "case_sensitive": False,

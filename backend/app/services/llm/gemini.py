@@ -75,12 +75,20 @@ class GeminiProvider(LLMProvider):
 
         max_retries = getattr(self._settings, "gemini_max_retries", 3)
         base_backoff = float(getattr(self._settings, "gemini_retry_backoff_seconds", 2.0))
+        timeout_s = float(getattr(self._settings, "llm_generate_timeout_seconds", 30.0))
 
         last_err: Optional[Exception] = None
         for attempt in range(max_retries):
             try:
-                response = await self._model.generate_content_async(prompt)  # type: ignore[union-attr]
+                response = await asyncio.wait_for(
+                    self._model.generate_content_async(prompt),  # type: ignore[union-attr]
+                    timeout=timeout_s,
+                )
                 return getattr(response, "text", "")
+            except asyncio.TimeoutError:
+                logger.error("gemini_generate_timeout", attempt=attempt + 1, timeout_s=timeout_s)
+                last_err = asyncio.TimeoutError(f"timeout after {timeout_s}s")
+                break
             except Exception as e:  # Broad catch to ensure graceful degradation
                 last_err = e
                 if self._is_rate_limit_error(e):
@@ -104,12 +112,18 @@ class GeminiProvider(LLMProvider):
                     "gemini_fallback_try",
                     model=getattr(self._settings, "gemini_fallback_model", None),
                 )
-                response = await self._fallback_model.generate_content_async(prompt)  # type: ignore[attr-defined]
+                response = await asyncio.wait_for(
+                    self._fallback_model.generate_content_async(prompt),  # type: ignore[attr-defined]
+                    timeout=timeout_s,
+                )
                 logger.info(
                     "gemini_fallback_used",
                     model=getattr(self._settings, "gemini_fallback_model", None),
                 )
                 return getattr(response, "text", "")
+            except asyncio.TimeoutError:
+                logger.error("gemini_fallback_timeout", timeout_s=timeout_s)
+                last_err = asyncio.TimeoutError(f"timeout after {timeout_s}s")
             except Exception as e2:
                 logger.error("gemini_fallback_error", error=str(e2))
                 last_err = e2
@@ -117,4 +131,6 @@ class GeminiProvider(LLMProvider):
         # Friendly message when throttled or failed
         if last_err and self._is_rate_limit_error(last_err):
             return "現在リクエストが集中しているため回答できません。数十秒後に再度お試しください。"
+        if isinstance(last_err, asyncio.TimeoutError):
+            return "LLMの応答に時間がかかっています。しばらくしてから再度お試しください。"
         return "申し訳ございません。現在回答を生成できませんでした。しばらくしてからお試しください。"

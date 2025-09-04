@@ -30,12 +30,14 @@ export interface Message {
 export interface ChatRequest {
   message: string;
   session_id: string;
+  debug?: boolean; // request debug/trace payload from backend
 }
 
 export interface ChatResponse {
   message: Message;
   session_id: string;
   processing_time: number;
+  debug?: DebugInfo; // optional debug/trace payload when debug=true
 }
 
 export interface ChatHistory {
@@ -100,4 +102,23 @@ export interface QueryAnalysis {
   query_type: QueryType;
   confidence: number;
   keywords: string[];
+}
+
+// Debug/Trace Types (align with backend models)
+export interface DebugTraceEvent {
+  type: string; // e.g., agent_selected, tool_invoked
+  name?: string;
+  reason?: string;
+  ts?: number; // epoch ms
+  tool_input?: string;
+  took_ms?: number;
+  error?: string;
+}
+
+export interface DebugInfo {
+  display_header: string; // UI-friendly header string
+  selected_agent?: string;
+  selected_tool?: string;
+  decision_trace: DebugTraceEvent[];
+  thread_id?: string;
 }

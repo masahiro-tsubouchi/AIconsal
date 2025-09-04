@@ -7,7 +7,7 @@ from uuid import uuid4
 import structlog
 
 from app.core.config import get_settings
-from app.models.chat import ChatRequest, ChatResponse, ChatMessage, ChatHistory
+from app.models.chat import ChatRequest, ChatResponse, ChatMessage, ChatHistory, DebugInfo
 from app.models.ws import WSStatus, WSError, WSChatMessage
 from app.services.chat_service import ChatService
 
@@ -42,7 +42,8 @@ async def send_message(
         response_content = await chat_service.process_message(
             message=request.message,
             session_id=session_id,
-            file_ids=request.file_ids
+            file_ids=request.file_ids,
+            debug=bool(request.debug),
         )
         
         processing_time = time.time() - start_time
@@ -54,6 +55,18 @@ async def send_message(
             role="assistant",
             processing_time=processing_time
         )
+
+        # Attach debug header and payload if requested
+        debug_payload = None
+        if bool(request.debug):
+            last_debug = chat_service.get_last_debug_info()
+            if last_debug:
+                try:
+                    debug_payload = DebugInfo(**last_debug)
+                    # Prepend display header to assistant content (UIでも使えるように）
+                    assistant_message.content = f"[DEBUG] {debug_payload.display_header}\n\n" + assistant_message.content
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("attach_debug_info_failed", session_id=session_id, error=str(e))
         
         # Save to history
         await chat_service.add_message_to_history(assistant_message)
@@ -68,7 +81,8 @@ async def send_message(
         return ChatResponse(
             message=assistant_message,
             session_id=session_id,
-            processing_time=processing_time
+            processing_time=processing_time,
+            debug=debug_payload,
         )
         
     except Exception as e:

@@ -106,3 +106,34 @@ async def test_durable_execution_smoke(monkeypatch):
 
     assert isinstance(out, str)
     assert len(out) > 0
+
+
+@pytest.mark.asyncio
+async def test_workflow_invoke_timeout(monkeypatch):
+    # Configure a very small workflow timeout
+    settings = cfg.Settings()
+    settings.workflow_invoke_timeout_seconds = 0.05
+
+    # Ensure LangGraphService picks up our settings
+    monkeypatch.setattr(lgs, "get_settings", lambda: settings, raising=False)
+
+    # Create service with stub LLM so analyze node is fast (won't hang)
+    llm = StubLLMProvider(["general", "ok"])  # Analyze -> general; agent -> ok
+    service = lgs.LangGraphService(llm_provider=llm)
+
+    # Monkeypatch compiled workflow's ainvoke to simulate a hang beyond timeout
+    async def slow_ainvoke(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return {"response": "should not be returned"}
+
+    monkeypatch.setattr(service._workflow, "ainvoke", slow_ainvoke, raising=False)
+
+    out = await service.process_query(
+        query="timeout please",
+        context="",
+        file_context="",
+        thread_id="timeout-thread",
+    )
+
+    assert isinstance(out, str)
+    assert "タイムアウト" in out

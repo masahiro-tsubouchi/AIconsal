@@ -27,6 +27,7 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<FileInfo[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
+  const [debugMode, setDebugMode] = useState<boolean>(false);
 
   // WebSocket connection initialized after callback declarations
 
@@ -100,11 +101,20 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      if (isConnected) {
-        // Use WebSocket for real-time communication
+      // If debug mode is ON, force REST with debug=true to get display_header
+      if (debugMode) {
+        const response = await apiService.sendMessage({
+          message: content,
+          session_id: sessionId,
+          debug: true,
+        });
+        setMessages(prev => [...prev, response.message]);
+        setIsLoading(false);
+      } else if (isConnected) {
+        // Use WebSocket for real-time communication (no debug header path)
         sendWebSocketMessage(content);
       } else {
-        // Fallback to REST API
+        // Fallback to REST API (no debug payload)
         const response = await apiService.sendMessage({
           message: content,
           session_id: sessionId,
@@ -171,6 +181,17 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
               <span>{uploadedFiles.length}件</span>
             </div>
           )}
+          {/* Debug Mode Toggle */}
+          <div className="flex items-center text-sm">
+            <label className="mr-2 text-secondary-600">デバッグ</label>
+            <button
+              className={`px-2 py-1 rounded-md border ${debugMode ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-secondary-700 border-secondary-300'}`}
+              onClick={() => setDebugMode(prev => !prev)}
+              title="デバッグモード（REST送信 + ヘッダ表示）"
+            >
+              {debugMode ? 'ON' : 'OFF'}
+            </button>
+          </div>
           <Button
             variant="ghost"
             size="sm"

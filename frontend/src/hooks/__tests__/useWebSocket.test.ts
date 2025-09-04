@@ -1,23 +1,10 @@
 /**
- * useWebSocket Hook Tests
+ * useWebSocket Hook Tests (native WebSocket)
  * Manufacturing AI Assistant Frontend
  */
 
 import { renderHook, act } from '@testing-library/react';
-import { useWebSocket } from '@/hooks/useWebSocket';
-
-// Mock socket.io-client
-jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    on: jest.fn(),
-    emit: jest.fn(),
-    disconnect: jest.fn(),
-    connected: false,
-  })),
-}));
-
-import { io } from 'socket.io-client';
-const mockIo = io as jest.MockedFunction<typeof io>;
+import { useWebSocket } from '../useWebSocket';
 
 describe('useWebSocket Hook', () => {
   const mockProps = {
@@ -27,140 +14,65 @@ describe('useWebSocket Hook', () => {
     onStatusUpdate: jest.fn(),
   };
 
+  let socketInstance: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    socketInstance = {
+      send: jest.fn(),
+      close: jest.fn(),
+      // onopen/onmessage/onclose/onerror will be assigned by hook
+    };
+    // @ts-ignore - configured in setupTests to be a jest.fn
+    global.WebSocket.mockImplementation(() => socketInstance);
   });
 
-  it('initializes socket connection', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: false,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
-
+  it('initializes WebSocket connection with correct URL', () => {
     renderHook(() => useWebSocket(mockProps));
 
-    expect(mockIo).toHaveBeenCalledWith(
-      expect.stringContaining('ws://localhost:8002'),
-      expect.objectContaining({
-        query: { session_id: 'test-session' },
-        transports: ['websocket'],
-      })
+    // @ts-ignore
+    expect(global.WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('ws://localhost:8002/api/v1/chat/ws/test-session')
     );
   });
 
-  it('sets up event listeners', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: false,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
+  it('sets connection status on open/close and sends messages when connected', () => {
+    const { result } = renderHook(() => useWebSocket(mockProps));
 
+    // Simulate open
+    act(() => {
+      socketInstance.onopen?.();
+    });
+    expect(mockProps.onStatusUpdate).toHaveBeenCalledWith('Connected');
+
+    // Send message
+    act(() => {
+      result.current.sendMessage('Hello');
+    });
+    expect(socketInstance.send).toHaveBeenCalledWith('Hello');
+
+    // Simulate close
+    act(() => {
+      socketInstance.onclose?.({ code: 1000, reason: 'test-close' });
+    });
+    expect(mockProps.onStatusUpdate).toHaveBeenCalledWith('Disconnected');
+  });
+
+  it('calls onError on error', () => {
     renderHook(() => useWebSocket(mockProps));
 
-    expect(mockSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
-    expect(mockSocket.on).toHaveBeenCalledWith('disconnect', expect.any(Function));
-    expect(mockSocket.on).toHaveBeenCalledWith('connect_error', expect.any(Function));
-    expect(mockSocket.on).toHaveBeenCalledWith('message', expect.any(Function));
-    expect(mockSocket.on).toHaveBeenCalledWith('error', expect.any(Function));
+    act(() => {
+      socketInstance.onerror?.(new Event('error'));
+    });
+
+    expect(mockProps.onError).toHaveBeenCalledWith('WebSocket connection error');
   });
 
-  it('sends message when connected', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: true,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
-
-    const { result } = renderHook(() => useWebSocket(mockProps));
-
-    // Simulate connection
-    act(() => {
-      const connectHandler = mockSocket.on.mock.calls.find(call => call[0] === 'connect')?.[1];
-      if (connectHandler) connectHandler();
-    });
-
-    act(() => {
-      result.current.sendMessage('Hello');
-    });
-
-    expect(mockSocket.emit).toHaveBeenCalledWith('message', {
-      message: 'Hello',
-      session_id: 'test-session',
-    });
-  });
-
-  it('calls onError when not connected and trying to send', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: false,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
-
-    const { result } = renderHook(() => useWebSocket(mockProps));
-
-    act(() => {
-      result.current.sendMessage('Hello');
-    });
-
-    expect(mockProps.onError).toHaveBeenCalledWith('WebSocket not connected');
-  });
-
-  it('disconnects on unmount', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: false,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
-
+  it('closes socket on unmount', () => {
     const { unmount } = renderHook(() => useWebSocket(mockProps));
 
     unmount();
 
-    expect(mockSocket.disconnect).toHaveBeenCalled();
-  });
-
-  it('handles connection events', () => {
-    const mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      disconnect: jest.fn(),
-      connected: false,
-    };
-    
-    mockIo.mockReturnValue(mockSocket as any);
-
-    renderHook(() => useWebSocket(mockProps));
-
-    // Simulate connect event
-    act(() => {
-      const connectHandler = mockSocket.on.mock.calls.find(call => call[0] === 'connect')?.[1];
-      if (connectHandler) connectHandler();
-    });
-
-    expect(mockProps.onStatusUpdate).toHaveBeenCalledWith('Connected');
-
-    // Simulate disconnect event
-    act(() => {
-      const disconnectHandler = mockSocket.on.mock.calls.find(call => call[0] === 'disconnect')?.[1];
-      if (disconnectHandler) disconnectHandler();
-    });
-
-    expect(mockProps.onStatusUpdate).toHaveBeenCalledWith('Disconnected');
+    expect(socketInstance.close).toHaveBeenCalled();
   });
 });

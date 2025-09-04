@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.services.llm.base import LLMProvider
 
-# Async callable signature for agent entrypoints
+# Async callable signature for agent entrypoints (legacy)
 AgentFn = Callable[[Optional[LLMProvider], str, str, str], Awaitable[str]]
 
 
@@ -25,8 +25,14 @@ class AgentOutput(BaseModel):
     error: Optional[str] = None
 
 
+# New callable signature for agent entrypoints using structured I/O
+# Using string annotations to avoid forward-reference issues at runtime
+AgentFnV2 = Callable[[Optional[LLMProvider], "AgentInput"], Awaitable["AgentOutput"]]
+
+
 __all__ = [
     "AgentFn",
     "AgentInput",
     "AgentOutput",
+    "AgentFnV2",
 ]

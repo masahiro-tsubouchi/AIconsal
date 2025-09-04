@@ -43,7 +43,11 @@ export const useWebSocket = ({
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
-      socketRef.current.close();
+      // Some test mocks may not implement close(); guard accordingly
+      const anySocket: any = socketRef.current as any;
+      if (typeof anySocket.close === 'function') {
+        anySocket.close();
+      }
       socketRef.current = null;
       setIsConnected(false);
     }
@@ -163,7 +167,10 @@ export const useWebSocket = ({
         clearTimeout(reconnectTimeout);
       }
       if (socketRef.current) {
-        socketRef.current.close(1000, 'Component unmounting');
+        const anySocket: any = socketRef.current as any;
+        if (typeof anySocket.close === 'function') {
+          anySocket.close(1000, 'Component unmounting');
+        }
         socketRef.current = null;
       }
     };

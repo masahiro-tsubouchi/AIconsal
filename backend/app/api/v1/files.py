@@ -24,8 +24,14 @@ async def upload_file(
     settings = get_settings()
     
     try:
-        # Validate file size
-        if file.size > settings.max_file_size:
+        # Validate file size (fallback to reading when size is unavailable)
+        size_bytes = getattr(file, "size", None)
+        if not size_bytes or size_bytes == 0:
+            # read to determine size, then rewind for downstream processing
+            peek = await file.read()
+            size_bytes = len(peek)
+            await file.seek(0)
+        if size_bytes > settings.max_file_size:
             raise HTTPException(
                 status_code=413,
                 detail=f"ファイルサイズが上限を超えています（最大: {settings.max_file_size / 1024 / 1024:.1f}MB）"
@@ -68,6 +74,9 @@ async def upload_file(
             message=f"ファイル '{uploaded_file.original_filename}' が正常にアップロードされました"
         )
         
+    except HTTPException as he:
+        # Preserve explicit HTTP errors such as 400/413 validations
+        raise he
     except Exception as e:
         processing_time = time.time() - start_time
         logger.error(
@@ -90,6 +99,9 @@ async def get_file_info(
         if not file_info:
             raise HTTPException(status_code=404, detail="ファイルが見つかりません")
         return file_info
+    except HTTPException as he:
+        # Preserve 404 when not found
+        raise he
     except Exception as e:
         logger.error("get_file_info_error", file_id=file_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"ファイル情報取得エラー: {str(e)}")
@@ -122,6 +134,9 @@ async def delete_file(
         
         logger.info("file_deleted", file_id=file_id)
         return {"message": "ファイルが削除されました", "file_id": file_id}
+    except HTTPException as he:
+        # Preserve 404 when not found
+        raise he
     except Exception as e:
         logger.error("delete_file_error", file_id=file_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"ファイル削除エラー: {str(e)}")

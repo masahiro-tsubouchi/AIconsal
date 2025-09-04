@@ -34,6 +34,12 @@
 **開発環境（推奨）:**
 - VSCode + Dev Containers拡張機能
 
+### 🧭 コマンド規約
+
+- Docker Compose CLI は `docker compose`（V2）を使用します。
+- Compose ファイル名は `docker-compose.yml` を使用します。
+- 任意指定の注記は日本語では全て `（任意）` と表記します。
+
 ## 🚀 Docker環境セットアップ
 
 ### 1. リポジトリクローン
@@ -52,19 +58,19 @@ cp frontend/.env.example frontend/.env
 
 # 必要なAPI キーを設定
 # - GEMINI_API_KEY
-# - LANGSMITH_API_KEY (オプション)
+# - LANGSMITH_API_KEY（任意）
 ```
 
 ### 3. Docker Compose起動
 ```bash
 # 開発環境起動（デタッチモード）
-docker-compose up -d
+docker compose up -d
 
 # ログ確認
-docker-compose logs -f
+docker compose logs -f
 
 # 停止
-docker-compose down
+docker compose down
 ```
 
 ### 4. アクセス
@@ -84,19 +90,19 @@ code .
 ### 手動Docker開発環境
 ```bash
 # 開発用コンテナ起動（ホットリロード有効）
-docker-compose up
+docker compose up
 
 # バックエンドシェル接続
-docker-compose exec backend bash
+docker compose exec backend bash
 
 # フロントエンドシェル接続  
-docker-compose exec frontend bash
+docker compose exec frontend bash
 
 # 依存関係インストール（バックエンド）
-docker-compose exec backend pip install <package-name>
+docker compose exec backend pip install <package-name>
 
 # 依存関係インストール（フロントエンド）
-docker-compose exec frontend npm install <package-name>
+docker compose exec frontend npm install <package-name>
 ```
 
 ## 🧪 Docker環境でのテスト実行
@@ -104,38 +110,62 @@ docker-compose exec frontend npm install <package-name>
 ### バックエンドテスト
 ```bash
 # テスト実行
-docker-compose exec backend pytest
+docker compose exec backend pytest
 
 # カバレッジ付きテスト
-docker-compose exec backend pytest --cov=app --cov-report=html
+docker compose exec backend pytest --cov=app --cov-report=html
 
 # 特定テストファイル実行
-docker-compose exec backend pytest tests/test_chat_service.py -v
+docker compose exec backend pytest tests/test_chat_service.py -v
 
 # 単体・統合テスト分割実行
-docker-compose exec backend pytest -m unit
-docker-compose exec backend pytest -m integration
+docker compose exec backend pytest -m unit
+docker compose exec backend pytest -m integration
 ```
+
+#### 開発中の素早いループ（カバレッジ閾値を無効化）
+pytest.ini でカバレッジ閾値 `--cov-fail-under=80` を有効化しています。部分的なテスト実行や素早い開発ループでは、以下のように一時的にカバレッジ計測を無効化して失敗を避けられます。
+
+```bash
+# 全テスト（カバレッジ無効）
+docker compose exec -T backend pytest -q --no-cov
+
+# 統合テストのみ（例）
+docker compose exec -T backend pytest tests/integration -v --tb=short --no-cov
+
+# 単一テスト（例）
+docker compose exec -T backend pytest tests/integration/test_api_debug.py::TestAPIDebugMode::test_chat_endpoint_returns_debug_payload_and_header -q --no-cov
+```
+
+カバレッジを確認・担保したい場合は、`--no-cov` を外して実行してください。
 
 ### フロントエンドテスト
 ```bash
 # テスト実行
-docker-compose exec frontend npm test
+docker compose exec frontend npm test
 
 # カバレッジ付きテスト
-docker-compose exec frontend npm run test:coverage
+docker compose exec frontend npm run test:coverage
 
 # E2Eテスト（将来実装）
-docker-compose exec frontend npm run test:e2e
+docker compose exec frontend npm run test:e2e
 ```
+
+#### 非対話（CI想定）でのフロントエンドテスト実行
+CI 互換の一括実行コマンド（watch 無効化）:
+
+```bash
+docker compose run --rm -e CI=true frontend npm test -- --watchAll=false
+```
+※ 新規 UI テストでは、デバッグモード時に `[DEBUG]` ヘッダーが UI 上で強調表示されることを検証しています。
 
 ### 統合テスト
 ```bash
 # 全サービス起動後の統合テスト
-docker-compose exec backend pytest tests/integration/ -v
+docker compose exec backend pytest tests/integration/ -v
 
 # API接続テスト
-curl http://localhost:8002/health
+curl http://localhost:8002/api/v1/health
 ```
 
 ## 📁 プロジェクト構造
@@ -186,6 +216,16 @@ LangGraphChatBot/
 # - ENABLE_CHECKPOINTER=true
 ```
 
+#### デバッグモードのトレース情報（UI 連携）
+`LangGraphService` は `debug=true` の場合に意思決定トレースを保持し、バックエンドの `ChatResponse` に以下を含めます。
+
+- `message.content` の先頭に `[DEBUG] {display_header}` を 1 行として自動付与（その後に本回答が続きます）
+- `debug` フィールドにフルのデバッグペイロード（`display_header`、`selected_agent`、`selected_tool`、`decision_trace` など）
+
+フロントエンドのチャット画面では、ヘッダー右側の「デバッグ」トグルを ON にすると、メッセージ送信時に REST で `debug=true` を付与して送信します。受信したアシスタントメッセージは、`[DEBUG]` 行を検出して可視的なヘッダーとして強調表示し、その下に回答本文（Markdown）が表示されます。
+
+参考: 統合テスト例は `backend/tests/integration/test_api_debug.py` を参照してください。
+
 ### 環境変数
 
 #### バックエンド (.env)
@@ -207,7 +247,7 @@ UPLOAD_DIR=/tmp/uploads
 # Session Management
 SESSION_TIMEOUT=3600
 
-# Durable Execution (optional)
+# Durable Execution（任意）
 # LangGraph のチェックポインタ（MemorySaver）を有効化すると、
 # 長時間処理・再開・失敗復帰に強い実行が可能になります。
 # Settings.enable_checkpointer に対応します。
@@ -279,26 +319,26 @@ PORT=3002
 #### Python (バックエンド)
 ```bash
 # コード整形（Docker内）
-docker-compose exec backend black app/
-docker-compose exec backend isort app/
+docker compose exec backend black app/
+docker compose exec backend isort app/
 
 # 型チェック
-docker-compose exec backend mypy app/
+docker compose exec backend mypy app/
 
 # リント
-docker-compose exec backend flake8 app/
+docker compose exec backend flake8 app/
 ```
 
 #### TypeScript (フロントエンド)
 ```bash
 # コード整形（Docker内）
-docker-compose exec frontend npm run format
+docker compose exec frontend npm run format
 
 # リント
-docker-compose exec frontend npm run lint
+docker compose exec frontend npm run lint
 
 # 型チェック
-docker-compose exec frontend npm run type-check
+docker compose exec frontend npm run type-check
 ```
 
 ### デバッグ
@@ -306,10 +346,10 @@ docker-compose exec frontend npm run type-check
 #### バックエンドデバッグ
 ```bash
 # デバッグログ確認
-docker-compose logs backend -f
+docker compose logs backend -f
 
 # コンテナ内でインタラクティブ実行
-docker-compose exec backend python -i
+docker compose exec backend python -i
 ```
 
 #### フロントエンドデバッグ
@@ -318,7 +358,7 @@ docker-compose exec backend python -i
 # Chrome DevTools使用推奨
 
 # React DevTools確認
-docker-compose logs frontend
+docker compose logs frontend
 ```
 
 ## 📊 Docker監視・運用
@@ -326,10 +366,10 @@ docker-compose logs frontend
 ### ヘルスチェック
 ```bash
 # サービス状態確認
-docker-compose ps
+docker compose ps
 
 # ヘルスチェック
-curl http://localhost:8002/health
+curl http://localhost:8002/api/v1/health
 curl http://localhost:3002
 
 # リソース使用量
@@ -339,14 +379,14 @@ docker stats
 ### ログ管理
 ```bash
 # 全サービスログ
-docker-compose logs -f
+docker compose logs -f
 
 # 特定サービスログ
-docker-compose logs -f backend
-docker-compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f frontend
 
 # ログファイル出力
-docker-compose logs > logs/app.log
+docker compose logs > logs/app.log
 ```
 
 ### パフォーマンス最適化
@@ -380,16 +420,16 @@ docker builder prune
 #### 1. Gemini API エラー
 ```bash
 # APIキーの確認
-docker-compose exec backend env | grep GEMINI_API_KEY
+docker compose exec backend env | grep GEMINI_API_KEY
 ```
 
 #### 2. Docker ビルドエラー
 ```bash
 # 完全リセット
-docker-compose down -v
+docker compose down -v
 docker system prune -a
-docker-compose build --no-cache
-docker-compose up
+docker compose build --no-cache
+docker compose up
 ```
 
 #### 3. ポート競合エラー
@@ -399,15 +439,15 @@ lsof -i :8002
 lsof -i :3002
 
 # コンテナ停止
-docker-compose down
+docker compose down
 ```
 
 #### 4. ボリュームマウントエラー
 ```bash
 # ボリューム再作成
-docker-compose down -v
+docker compose down -v
 docker volume prune
-docker-compose up
+docker compose up
 ```
 
 ## 📊 非機能要件
@@ -452,16 +492,16 @@ docker-compose up
 ### Docker環境リセット手順
 ```bash
 # 完全リセット
-docker-compose down -v
+docker compose down -v
 docker system prune -a
-docker-compose build --no-cache
-docker-compose up
+docker compose build --no-cache
+docker compose up
 
 # ログ確認
-docker-compose logs | grep ERROR
+docker compose logs | grep ERROR
 
 # 個別サービス再起動
-docker-compose restart backend frontend
+docker compose restart backend frontend
 ```
 
 ---

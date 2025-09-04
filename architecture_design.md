@@ -363,14 +363,14 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8002:8000"
+      - "8002:8002"
     volumes:
       - ./backend:/app
     environment:
       - PYTHONPATH=/app
       - PYTHON_ENV=development
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -378,7 +378,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3002:3000"
+      - "3002:3002"
     volumes:
       - ./frontend:/app
       - /app/node_modules

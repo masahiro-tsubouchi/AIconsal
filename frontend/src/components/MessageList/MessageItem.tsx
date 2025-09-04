@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import { User, Bot, Copy, Check, Bug } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '../../types/api';
 import Button from '../ui/Button';
@@ -33,6 +33,18 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isLatest = false }) 
     }
   };
 
+  // Extract debug header for assistant messages (when content starts with "[DEBUG] ...\n\n")
+  const [debugHeader, contentForRender] = React.useMemo(() => {
+    if (isUser) return [null as string | null, message.content] as const;
+    const match = message.content.match(/^\[DEBUG\]\s*(.+)\n{1,2}/);
+    if (match) {
+      const header = match[1].trim();
+      const rest = message.content.slice(match[0].length);
+      return [header, rest] as const;
+    }
+    return [null as string | null, message.content] as const;
+  }, [isUser, message.content]);
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`flex max-w-[80%] ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-2`}>
@@ -59,31 +71,43 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isLatest = false }) 
             {isUser ? (
               <p className="whitespace-pre-wrap">{message.content}</p>
             ) : (
-              <ReactMarkdown
-                className="prose prose-sm max-w-none"
-                components={{
-                  // Custom styling for markdown elements
-                  h1: ({children}) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-                  h2: ({children}) => <h2 className="text-md font-bold mb-2">{children}</h2>,
-                  h3: ({children}) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
-                  p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
-                  code: ({children}) => (
-                    <code className="bg-secondary-100 text-secondary-800 px-1 py-0.5 rounded text-xs font-mono">
-                      {children}
-                    </code>
-                  ),
-                  pre: ({children}) => (
-                    <pre className="bg-secondary-100 p-3 rounded-md overflow-x-auto text-xs font-mono mb-2">
-                      {children}
-                    </pre>
-                  ),
-                  ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                  ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                  li: ({children}) => <li className="text-sm">{children}</li>,
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
+              <>
+                {debugHeader && (
+                  <div
+                    aria-label="debug-header"
+                    className="mb-2 text-xs text-warning-700 bg-warning-50 border border-warning-200 rounded-md px-2 py-1 flex items-center space-x-2"
+                  >
+                    <Bug className="w-3 h-3" />
+                    <span className="font-medium">DEBUG</span>
+                    <span className="truncate">{debugHeader}</span>
+                  </div>
+                )}
+                <ReactMarkdown
+                  className="prose prose-sm max-w-none"
+                  components={{
+                    // Custom styling for markdown elements
+                    h1: ({children}) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                    h2: ({children}) => <h2 className="text-md font-bold mb-2">{children}</h2>,
+                    h3: ({children}) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                    p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                    code: ({children}) => (
+                      <code className="bg-secondary-100 text-secondary-800 px-1 py-0.5 rounded text-xs font-mono">
+                        {children}
+                      </code>
+                    ),
+                    pre: ({children}) => (
+                      <pre className="bg-secondary-100 p-3 rounded-md overflow-x-auto text-xs font-mono mb-2">
+                        {children}
+                      </pre>
+                    ),
+                    ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                    li: ({children}) => <li className="text-sm">{children}</li>,
+                  }}
+                >
+                  {contentForRender}
+                </ReactMarkdown>
+              </>
             )}
           </div>
 
@@ -98,6 +122,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isLatest = false }) 
               variant="ghost"
               size="sm"
               onClick={copyToClipboard}
+              aria-label="copy"
               className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 h-6 w-6 ${
                 isUser 
                   ? 'text-primary-200 hover:text-white hover:bg-primary-700' 

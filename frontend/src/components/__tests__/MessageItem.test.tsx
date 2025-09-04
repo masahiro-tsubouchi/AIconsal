@@ -115,4 +115,64 @@ describe('MessageItem Component', () => {
     messageDiv = screen.getByText('Improvement Suggestions').closest('.bg-white');
     expect(messageDiv).toBeInTheDocument();
   });
+
+  it('renders a visible debug header when assistant content contains [DEBUG] header line', () => {
+    const debugContent = [
+      '[DEBUG] Selected Agent: Python Mentor (tools: none)',
+      '',
+      '## Response',
+      '',
+      'This is the assistant reply.'
+    ].join('\n');
+
+    const msg: Message = {
+      id: '3',
+      content: debugContent,
+      role: 'assistant',
+      timestamp: '2023-12-01T10:02:00Z',
+      session_id: 'session-1',
+    };
+
+    render(<MessageItem message={msg} />);
+
+    // Debug header container should be present
+    const header = screen.getByLabelText('debug-header');
+    expect(header).toBeInTheDocument();
+    // Header text should include the extracted header (without the [DEBUG] prefix)
+    expect(screen.getByText('Selected Agent: Python Mentor (tools: none)')).toBeInTheDocument();
+    // Markdown body should render without the debug header line
+    expect(screen.getByText('Response')).toBeInTheDocument();
+    expect(screen.getByText('This is the assistant reply.')).toBeInTheDocument();
+  });
+
+  it('copy button copies full raw assistant content including [DEBUG] header', async () => {
+    const debugContent = [
+      '[DEBUG] Selected Agent: Python Mentor (tools: none)',
+      '',
+      'Answer body'
+    ].join('\n');
+
+    const msg: Message = {
+      id: '4',
+      content: debugContent,
+      role: 'assistant',
+      timestamp: '2023-12-01T10:03:00Z',
+      session_id: 'session-1',
+    };
+
+    render(<MessageItem message={msg} />);
+
+    const header = screen.getByLabelText('debug-header');
+    const messageContainer = header.closest('.group');
+    expect(messageContainer).toBeInTheDocument();
+
+    // Hover to show copy button and click
+    fireEvent.mouseEnter(messageContainer!);
+    const copyButton = screen.getByRole('button', { name: /copy/i });
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(debugContent);
+    });
+  });
 });

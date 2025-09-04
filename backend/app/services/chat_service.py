@@ -33,7 +33,8 @@ class ChatService:
         self, 
         message: str, 
         session_id: str, 
-        file_ids: Optional[List[str]] = None
+        file_ids: Optional[List[str]] = None,
+        debug: Optional[bool] = False,
     ) -> str:
         """Process a user message and return AI response"""
         try:
@@ -57,12 +58,13 @@ class ChatService:
             # Get conversation history for context
             conversation_history = await self._build_conversation_context(session_id)
             
-            # Process with LangGraph
-            response = await self._langgraph_service.process_manufacturing_query(
+            # Process with LangGraph (always per-message invocation)
+            response = await self._langgraph_service.process_query(
                 query=message,
                 context=conversation_history,
                 file_context=file_context,
                 thread_id=session_id,
+                debug=bool(debug),
             )
             
             logger.info(
@@ -82,6 +84,13 @@ class ChatService:
                 error=str(e)
             )
             return "申し訳ございません。処理中にエラーが発生しました。もう一度お試しください。"
+
+    def get_last_debug_info(self) -> Optional[dict]:
+        """Expose last debug info built by LangGraphService for the latest call."""
+        try:
+            return self._langgraph_service.get_last_debug_info()
+        except Exception:
+            return None
     
     async def add_message_to_history(self, message: ChatMessage) -> None:
         """Add a message to session history"""
