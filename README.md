@@ -295,7 +295,7 @@ PORT=3002
 
 #### チャット
 - `POST /api/v1/chat/` - メッセージ送信
-- `GET /api/v1/chat/history/{session_id}` - 会話履歴取得
+- `GET /api/v1/chat/history/{session_id}` - 会話履歴取得（任意: `?limit=N` で最新N件のみ）
 - `WS /api/v1/chat/ws/{session_id}` - WebSocket接続
 
 #### ファイル

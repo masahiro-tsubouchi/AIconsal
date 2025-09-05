@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Message, WebSocketMessage } from '../types/api';
 import { apiService } from '../services/api';
+import { normalizeMessage } from '../services/mappers';
 
 interface UseWebSocketProps {
   sessionId: string;
@@ -122,14 +123,10 @@ export const useWebSocket = ({
               return;
             }
             if (parsed.type === 'message') {
-              const msgData = parsed.data as Message;
+              const normalized = normalizeMessage((parsed as any).data);
               const message: Message = {
-                id: msgData.id || Date.now().toString(),
-                content: msgData.content,
-                role: msgData.role,
-                timestamp: msgData.timestamp || new Date().toISOString(),
-                session_id: msgData.session_id || sessionId,
-                file_context: msgData.file_context,
+                ...normalized,
+                session_id: normalized.session_id || sessionId,
               };
               onMessage?.(message);
               return;

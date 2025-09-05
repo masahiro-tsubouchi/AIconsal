@@ -75,4 +75,31 @@ describe('useWebSocket Hook', () => {
 
     expect(socketInstance.close).toHaveBeenCalled();
   });
+
+  it('normalizes file_ids to file_context for typed message payload', () => {
+    const onMessage = jest.fn();
+    const props = { ...mockProps, onMessage };
+    renderHook(() => useWebSocket(props));
+
+    act(() => {
+      const payload = JSON.stringify({
+        type: 'message',
+        data: {
+          id: 'm1',
+          content: 'hello',
+          role: 'assistant',
+          timestamp: '2023-01-01T00:00:00Z',
+          // session_id intentionally omitted to test fallback to hook's sessionId
+          file_ids: ['f1', 'f2'],
+        },
+      });
+      socketInstance.onmessage?.({ data: payload });
+    });
+
+    expect(onMessage).toHaveBeenCalledTimes(1);
+    const received = onMessage.mock.calls[0][0];
+    expect(received.file_context).toEqual(['f1', 'f2']);
+    // Fallback applied by the hook when session_id is missing in payload
+    expect(received.session_id).toBe('test-session');
+  });
 });

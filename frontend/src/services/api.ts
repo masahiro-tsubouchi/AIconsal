@@ -14,6 +14,7 @@ import {
   FileInfo,
   HealthCheck,
 } from '../types/api';
+import { normalizeMessage, normalizeHistory, normalizeFileInfo } from './mappers';
 
 class ApiService {
   private client: AxiosInstance;
@@ -54,21 +55,29 @@ class ApiService {
 
   // Health Check
   async healthCheck(): Promise<HealthCheck> {
-    const response: AxiosResponse<HealthCheck> = await this.client.get('/health');
-    return response.data;
+    const response: AxiosResponse<any> = await this.client.get('/health');
+    const data = response.data || {};
+    return {
+      status: data.status,
+      version: data.version,
+      timestamp: data.timestamp ?? new Date().toISOString(),
+    } as HealthCheck;
   }
 
   // Chat Endpoints
   async sendMessage(request: ChatRequest): Promise<ChatResponse> {
     const response: AxiosResponse<ChatResponse> = await this.client.post('/api/v1/chat/', request);
-    return response.data;
+    const resp = response.data;
+    const msg = normalizeMessage((resp as any)?.message);
+    return { ...(resp as any), message: msg } as ChatResponse;
   }
 
-  async getChatHistory(sessionId: string, limit: number = 50): Promise<ChatHistory> {
-    const response: AxiosResponse<ChatHistory> = await this.client.get(
-      `/api/v1/chat/history/${sessionId}?limit=${limit}`
-    );
-    return response.data ?? { messages: [], session_id: sessionId };
+  async getChatHistory(sessionId: string, limit?: number): Promise<ChatHistory> {
+    const url = limit && limit > 0
+      ? `/api/v1/chat/history/${sessionId}?limit=${encodeURIComponent(String(limit))}`
+      : `/api/v1/chat/history/${sessionId}`;
+    const response: AxiosResponse<any> = await this.client.get(url);
+    return normalizeHistory(response.data, sessionId);
   }
 
   // File Management Endpoints
@@ -77,7 +86,7 @@ class ApiService {
     formData.append('file', file);
     formData.append('session_id', sessionId);
 
-    const response: AxiosResponse<FileUploadResponse> = await this.client.post(
+    const response: AxiosResponse<any> = await this.client.post(
       '/api/v1/files/upload',
       formData,
       {
@@ -86,14 +95,14 @@ class ApiService {
         },
       }
     );
-    return response.data;
+    const raw = response.data;
+    const mapped: FileInfo = normalizeFileInfo(raw);
+    return { data: mapped, message: (raw && raw.message) || undefined, success: true } as FileUploadResponse;
   }
 
   async getFileInfo(fileId: string): Promise<FileInfo> {
-    const response: AxiosResponse<ApiResponse<FileInfo>> = await this.client.get(
-      `/api/v1/files/${fileId}`
-    );
-    return response.data.data!;
+    const response: AxiosResponse<any> = await this.client.get(`/api/v1/files/${fileId}`);
+    return normalizeFileInfo(response.data);
   }
 
   async deleteFile(fileId: string): Promise<void> {
@@ -101,17 +110,16 @@ class ApiService {
   }
 
   async getSessionFiles(sessionId: string): Promise<FileInfo[]> {
-    const response: AxiosResponse<FileListResponse> = await this.client.get(
-      `/api/v1/files/session/${sessionId}`
-    );
-    return response.data.data || [];
+    const response: AxiosResponse<any> = await this.client.get(`/api/v1/files/session/${sessionId}`);
+    const list: any[] = response.data || [];
+    return list.map((f: any) => normalizeFileInfo(f)) as FileInfo[];
   }
 
   // WebSocket URL
-  getWebSocketUrl(): string {
+  getWebSocketUrl(sessionId: string): string {
     const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws';
     const wsURL = this.baseURL.replace(/^https?/, wsProtocol);
-    return `${wsURL}/api/v1/chat/ws`;
+    return `${wsURL}/api/v1/chat/ws/${sessionId}`;
   }
 }
 

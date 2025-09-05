@@ -40,7 +40,7 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
   const loadChatHistory = useCallback(async () => {
     try {
       setError(null);
-      const history = await apiService.getChatHistory(sessionId);
+      const history = await apiService.getChatHistory(sessionId, 50);
       setMessages(history.messages);
     } catch (error: any) {
       console.error('Failed to load chat history:', error);

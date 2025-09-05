@@ -1,7 +1,7 @@
 """Chat API endpoints"""
 import time
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from uuid import uuid4
 import structlog
@@ -98,14 +98,29 @@ async def send_message(
 @router.get("/history/{session_id}", response_model=ChatHistory)
 async def get_chat_history(
     session_id: str,
+    limit: Optional[int] = Query(None, ge=1, description="返却する最新メッセージ数の上限"),
     chat_service: ChatService = Depends(get_chat_service)
 ) -> ChatHistory:
-    """Get chat history for a session"""
+    """Get chat history for a session
+
+    Optional query parameter `limit` allows returning only the last N messages.
+    """
     try:
         history = await chat_service.get_chat_history(session_id)
         if not history:
             # 初回アクセスなどセッション未作成の場合は空の履歴を返す
             return ChatHistory(session_id=session_id, messages=[])
+
+        # Apply limit if provided
+        if limit is not None and history.messages:
+            messages = history.messages[-limit:]
+            return ChatHistory(
+                session_id=history.session_id,
+                messages=messages,
+                created_at=history.created_at,
+                last_active=history.last_active,
+            )
+
         return history
     except HTTPException as he:
         # 既存のHTTP例外はそのまま伝播

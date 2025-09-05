@@ -4,6 +4,7 @@ from typing import Optional, List
 
 from app.main import app
 from app.api.v1 import chat as chat_module
+from app.models.chat import ChatHistory, ChatMessage
 
 
 class FakeChatServiceBase:
@@ -176,3 +177,41 @@ def test_websocket_error_message_on_exception(client: TestClient, monkeypatch: p
         assert err["type"] == "error"
         assert err["session_id"] == "ws-sess-2"
         assert "エラー:" in err["data"]
+
+
+def test_get_history_with_limit_returns_last_n(client: TestClient):
+    class S(FakeChatServiceBase):
+        async def get_chat_history(self, session_id: str):
+            msgs = [
+                ChatMessage(id="m1", session_id=session_id, content="1", role="user"),
+                ChatMessage(id="m2", session_id=session_id, content="2", role="assistant"),
+                ChatMessage(id="m3", session_id=session_id, content="3", role="user"),
+            ]
+            return ChatHistory(session_id=session_id, messages=msgs)
+
+    app.dependency_overrides[chat_module.get_chat_service] = lambda: S()
+    try:
+        sid = "sess-limit-1"
+        resp = client.get(f"/api/v1/chat/history/{sid}?limit=2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["session_id"] == sid
+        assert len(data["messages"]) == 2
+        # Should be last two messages m2, m3 in order
+        assert [m["id"] for m in data["messages"]] == ["m2", "m3"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_history_with_invalid_limit_returns_422(client: TestClient):
+    class S(FakeChatServiceBase):
+        async def get_chat_history(self, session_id: str):
+            return ChatHistory(session_id=session_id, messages=[])
+
+    app.dependency_overrides[chat_module.get_chat_service] = lambda: S()
+    try:
+        sid = "sess-limit-2"
+        resp = client.get(f"/api/v1/chat/history/{sid}?limit=0")
+        assert resp.status_code == 422  # FastAPI validation error for ge=1
+    finally:
+        app.dependency_overrides.clear()

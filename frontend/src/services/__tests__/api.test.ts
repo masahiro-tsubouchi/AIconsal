@@ -55,6 +55,16 @@ describe('ApiService', () => {
     });
   });
 
+  describe('getChatHistory (conceptual URL with limit)', () => {
+    it('appends limit query parameter', () => {
+      const sessionId = 'session-abc';
+      const limit = 25;
+      const expected = `/api/v1/chat/history/${sessionId}?limit=${encodeURIComponent(String(limit))}`;
+      const built = `/api/v1/chat/history/${sessionId}?limit=${encodeURIComponent(String(limit))}`;
+      expect(built).toBe(expected);
+    });
+  });
+
   describe('uploadFile', () => {
     it('uploads file with correct FormData', async () => {
       const mockFile = new File(['content'], 'test.txt', { type: 'text/plain' });
@@ -109,22 +119,24 @@ describe('ApiService', () => {
     it('generates correct WebSocket URL', () => {
       // Test URL generation logic
       const baseURL = 'http://localhost:8002';
-      const expectedWsUrl = 'ws://localhost:8002/api/v1/chat/ws';
+      const sessionId = 'session-123';
+      const expectedWsUrl = `ws://localhost:8002/api/v1/chat/ws/${sessionId}`;
       
       const wsProtocol = baseURL.startsWith('https') ? 'wss' : 'ws';
       const wsURL = baseURL.replace(/^https?/, wsProtocol);
-      const fullWsUrl = `${wsURL}/api/v1/chat/ws`;
+      const fullWsUrl = `${wsURL}/api/v1/chat/ws/${sessionId}`;
 
       expect(fullWsUrl).toBe(expectedWsUrl);
     });
 
     it('handles HTTPS to WSS conversion', () => {
       const baseURL = 'https://api.example.com';
-      const expectedWsUrl = 'wss://api.example.com/api/v1/chat/ws';
+      const sessionId = 'session-123';
+      const expectedWsUrl = `wss://api.example.com/api/v1/chat/ws/${sessionId}`;
       
       const wsProtocol = baseURL.startsWith('https') ? 'wss' : 'ws';
       const wsURL = baseURL.replace(/^https?/, wsProtocol);
-      const fullWsUrl = `${wsURL}/api/v1/chat/ws`;
+      const fullWsUrl = `${wsURL}/api/v1/chat/ws/${sessionId}`;
 
       expect(fullWsUrl).toBe(expectedWsUrl);
     });

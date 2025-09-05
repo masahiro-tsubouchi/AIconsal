@@ -61,7 +61,7 @@
 ```python
 # 主要エンドポイント
 POST /api/v1/chat          # チャット送信
-GET  /api/v1/chat/history  # 会話履歴取得
+GET  /api/v1/chat/history/{session_id}  # 会話履歴取得（任意: ?limit=N で最新N件取得）
 POST /api/v1/files/upload  # ファイルアップロード
 GET  /api/v1/health        # ヘルスチェック
 WS   /api/v1/chat/ws/{session_id}  # WebSocket接続
@@ -416,7 +416,8 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:8002/api/v1
+      - REACT_APP_API_URL=http://localhost:8002
+      - REACT_APP_WS_URL=ws://localhost:8002
 ```
 
 ### 10.2 DevContainer設定
