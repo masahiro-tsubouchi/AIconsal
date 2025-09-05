@@ -20,6 +20,8 @@ services:
       - PORT=8002
       # To enable durable execution with LangGraph checkpointer, set:
       # - ENABLE_CHECKPOINTER=true
+    env_file:
+      - backend/.env
     networks:
       - app-network
     healthcheck:
