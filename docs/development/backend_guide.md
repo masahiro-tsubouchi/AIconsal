@@ -49,7 +49,26 @@ state['response'] = out.content
 
 ## Debug/Trace
 - `debug=True` で `decision_trace` を蓄積し、`_build_debug_info()` が UI 用 `display_header` を生成
+  （`app/services/langgraph_service.py`）。
 - RESTでは `message.content` 先頭に `[DEBUG] ...` を付与し、`ChatResponse.debug` に構造化情報を同梱
+  （`app/api/v1/chat.py`）。
+
+### フェーズA: イベントストリーミング（開発者向け）
+- 実装ファイル: `app/services/langgraph_service.py` の `stream_events()`
+  - LangGraph の `astream_events` を用いて、`on_chain_start|on_chain_stream|on_chain_end` などを逐次送出
+  - 返却ペイロードは `{ "event_type", "ts", "payload" }` に正規化
+- WebSocket 統合: `app/api/v1/chat.py` の `/api/v1/chat/ws/{session_id}`
+  - クエリ `?debug_streaming=1` または環境変数 `DEBUG_STREAMING=true` で有効化
+  - 有効時、通常の `message` とは別に `{"type":"debug_event"}` を逐次送信
+- サニタイズ方針（漏えい抑止）:
+  - トップレベルで `state/input/inputs/context/config` など機微・重量フィールドを除去
+  - 文字列は 500 文字を上限にトリム
+  - 追加強化（再帰的除去）は今後の改善余地
+- フェーズB最小プレビュー（breakpoint）:
+  - `DEBUG_BREAKPOINTS=true` かつ `debug=true` で接続した場合、処理開始前に `breakpoint_hit` を1度 emit
+- 運用指針:
+  - 既定は OFF。調査時のみ `?debug_streaming=1` か `DEBUG_STREAMING=true` を使用
+  - 本番では OFF を推奨
 
 ## ロギング
 - `structlog` で相関IDを付与

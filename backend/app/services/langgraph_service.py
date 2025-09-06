@@ -219,12 +219,95 @@ class LangGraphService:
             else:
                 self._last_debug_info = None
 
-            return result.get("response", "回答を生成できませんでした。")
+            # Normalize response to avoid empty strings propagating downstream
+            response_text = str(result.get('response') or '').strip()
+            if not response_text:
+                log.warning('empty_agent_response', note='using_fallback')
+                response_text = '回答を生成できませんでした。'
+            return response_text
 
         except Exception as e:
             log = logger.bind(thread_id=thread_id)
             log.error("langgraph_processing_error", error=str(e))
             return "システムエラーが発生しました。しばらく時間をおいてお試しください。"
+    
+    async def stream_events(
+        self,
+        query: str,
+        context: str = "",
+        file_context: str = "",
+        thread_id: Optional[str] = None,
+        debug: bool = True,
+    ):
+        """Stream debug events for a single user message using LangGraph astream_events.
+
+        Notes:
+        - Intended for developer debugging/observability. Runs independently of process_query().
+        - Callers should handle exceptions and ensure this is only used when explicitly enabled.
+        """
+        log = logger.bind(thread_id=thread_id)
+        try:
+            initial_state = WorkflowState(
+                user_query=query,
+                conversation_history=context,
+                file_context=file_context,
+                query_type="",
+                response="",
+                error=None,
+                thread_id=thread_id,
+                debug=bool(debug),
+                decision_trace=[],
+            )
+
+            cfg = None
+            if getattr(self._settings, "enable_checkpointer", False) and thread_id:
+                cfg = {"configurable": {"thread_id": thread_id}}
+
+            astream = self._workflow.astream_events(initial_state, config=cfg) if cfg else self._workflow.astream_events(initial_state)
+
+            # Phase B (minimal): emit a synthetic breakpoint event before processing starts
+            if getattr(self._settings, "debug_breakpoints", False) and bool(debug):
+                yield {
+                    "event_type": "breakpoint_hit",
+                    "ts": self._now_ms(),
+                    "payload": {"node": "analyze_query", "note": "pre-node breakpoint"},
+                }
+
+            async for ev in astream:
+                # Sanitize event object for transport (avoid leaking inputs/state)
+                try:
+                    event_type = (
+                        ev.get("event")
+                        or ev.get("type")
+                        or ev.get("event_type")
+                        or "event"
+                    )
+                except Exception:
+                    event_type = "event"
+
+                def _truncate(v):
+                    if isinstance(v, str) and len(v) > 500:
+                        return v[:500] + "..."
+                    return v
+
+                sanitized: dict = {}
+                if isinstance(ev, dict):
+                    for k, v in ev.items():
+                        # Drop potentially sensitive or heavy fields
+                        if k in ("state", "input", "inputs", "context", "config"):
+                            continue
+                        sanitized[k] = _truncate(v)
+                else:
+                    sanitized = {"data": _truncate(str(ev))}
+
+                yield {
+                    "event_type": str(event_type),
+                    "ts": self._now_ms(),
+                    "payload": sanitized,
+                }
+        except Exception as e:  # noqa: BLE001
+            log.error("stream_events_error", error=str(e))
+            return
     
     async def _analyze_query(self, state: WorkflowState) -> WorkflowState:
         """Analyze user query to determine type"""

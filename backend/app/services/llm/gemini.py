@@ -84,7 +84,13 @@ class GeminiProvider(LLMProvider):
                     self._model.generate_content_async(prompt),  # type: ignore[union-attr]
                     timeout=timeout_s,
                 )
-                return getattr(response, "text", "")
+                text = getattr(response, "text", "")
+                text = text.strip() if isinstance(text, str) else ""
+                if not text:
+                    logger.warning("gemini_empty_text", attempt=attempt + 1)
+                    last_err = ValueError("empty response text")
+                    break
+                return text
             except asyncio.TimeoutError:
                 logger.error("gemini_generate_timeout", attempt=attempt + 1, timeout_s=timeout_s)
                 last_err = asyncio.TimeoutError(f"timeout after {timeout_s}s")
@@ -120,7 +126,12 @@ class GeminiProvider(LLMProvider):
                     "gemini_fallback_used",
                     model=getattr(self._settings, "gemini_fallback_model", None),
                 )
-                return getattr(response, "text", "")
+                fb_text = getattr(response, "text", "")
+                fb_text = fb_text.strip() if isinstance(fb_text, str) else ""
+                if not fb_text:
+                    logger.warning("gemini_fallback_empty_text")
+                else:
+                    return fb_text
             except asyncio.TimeoutError:
                 logger.error("gemini_fallback_timeout", timeout_s=timeout_s)
                 last_err = asyncio.TimeoutError(f"timeout after {timeout_s}s")

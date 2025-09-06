@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { generateUuid } from '../../utils/uuid';
-import { Settings, FileText, Wifi, WifiOff } from 'lucide-react';
+import { Settings, FileText, Wifi, WifiOff, Activity } from 'lucide-react';
 import MessageList from '../MessageList/MessageList';
 import ChatInput from './ChatInput';
 import FileUpload from '../FileUpload/FileUpload';
@@ -13,6 +13,7 @@ import Button from '../ui/Button';
 import { Message, FileInfo } from '../../types/api';
 import { apiService } from '../../services/api';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import DebugPanel, { DebugEventItem } from '../debug/DebugPanel';
 
 interface ChatProps {
   className?: string;
@@ -28,6 +29,8 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
   const [uploadedFiles, setUploadedFiles] = useState<FileInfo[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
   const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [showDebugPanel, setShowDebugPanel] = useState<boolean>(false);
+  const [debugEvents, setDebugEvents] = useState<DebugEventItem[]>([]);
 
   // WebSocket connection initialized after callback declarations
 
@@ -80,6 +83,10 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
     onMessage: handleWebSocketMessage,
     onError: handleWebSocketError,
     onStatusUpdate: setConnectionStatus,
+    onDebugEvent: (ev: any) => {
+      // Keep last 100 events
+      setDebugEvents(prev => [...prev.slice(-99), ev]);
+    },
   });
 
   const sendMessage = useCallback(async (content: string) => {
@@ -192,6 +199,16 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
               {debugMode ? 'ON' : 'OFF'}
             </button>
           </div>
+          {/* Debug Panel Toggle (Phase A - WS streaming viewer) */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDebugPanel(prev => !prev)}
+            className="p-2"
+            title="デバッグイベントパネルを表示/非表示"
+          >
+            <Activity className={`w-4 h-4 ${showDebugPanel ? 'text-primary-600' : ''}`} />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -260,6 +277,15 @@ const Chat: React.FC<ChatProps> = ({ className = '' }) => {
         isLoading={isLoading}
         placeholder="改善活動やPython開発について質問してください..."
       />
+
+      {/* Debug Panel (Phase A) */}
+      {showDebugPanel && (
+        <DebugPanel
+          events={debugEvents}
+          onClear={() => setDebugEvents([])}
+          onClose={() => setShowDebugPanel(false)}
+        />
+      )}
     </div>
   );
 };

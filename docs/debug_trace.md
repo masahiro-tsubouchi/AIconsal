@@ -42,6 +42,28 @@ curl -s -X POST http://localhost:8002/api/v1/chat/ \
 
 ## フロントエンド表示
 - `MessageItem.tsx` で `[DEBUG] ...` の1行目を検出してヘッダーバッジ表示。本文Markdownはヘッダーを除いて描画。コピーは元テキストを維持。
+- フェーズA: WebSocket `debug_event` を受け取り、`components/debug/DebugPanel.tsx` でリアルタイム表示可能。
+
+## フェーズA: WebSocket Debug Event Streaming（開発者向け）
+- 有効化方法
+  - クエリ: `ws://.../api/v1/chat/ws/{session_id}?debug_streaming=1`
+  - 環境変数: `DEBUG_STREAMING=true`（バックエンド） / `REACT_APP_DEBUG_STREAMING=true`（フロント、クエリ自動付与）
+- イベント例（サニタイズ済み）
+```json
+{
+  "type": "debug_event",
+  "session_id": "dbg-1",
+  "data": {
+    "event_type": "on_chain_start",
+    "ts": 1725235200000,
+    "payload": {"event": "on_chain_start", "name": "analyze_query", "tags": ["graph:step:1"]}
+  }
+}
+```
+- 注意: 入力や内部状態は除去・短縮されます（漏えい抑止）。
+
+### 最小ブレークポイント（プレビュー）
+- `DEBUG_BREAKPOINTS=true` かつ `debug=true` の場合、処理開始前に `breakpoint_hit` イベントを1度送出します。
 
 ## 注意（セキュリティ/プライバシー）
 - `decision_trace` には入力の一部（ツール入力の短縮版など）が含まれる場合があります。運用時は取り扱いに注意してください。

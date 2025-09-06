@@ -83,7 +83,7 @@ export interface SessionInfo {
 
 // WebSocket Types
 export interface WebSocketMessage {
-  type: 'message' | 'error' | 'status';
+  type: 'message' | 'error' | 'status' | 'debug_event';
   data: any;
   session_id: string;
 }

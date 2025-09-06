@@ -77,11 +77,37 @@ curl -s "http://localhost:8002/api/v1/chat/history/demo-1?limit=50" | jq .
 - 概要: リアルタイム応答（双方向）。型付きJSONメッセージを送受信します。
 - メッセージ種別（例）:
 ```json
-{"type": "status",  "session_id": "...", "data": "connected"}
-{"type": "message", "session_id": "...", "data": { /* ChatMessage */ }}
-{"type": "error",   "session_id": "...", "data": "エラー内容"}
+{"type": "status",      "session_id": "...", "data": "connected"}
+{"type": "message",     "session_id": "...", "data": { /* ChatMessage */ }}
+{"type": "error",       "session_id": "...", "data": "エラー内容"}
+{"type": "debug_event", "session_id": "...", "data": { /* DebugEvent */ }}
 ```
-- 備考: 接続直後に `status` が送信され、その後は `message`（`ChatMessage`）が届きます（`app/api/v1/chat.py`）。
+- 備考:
+  - 接続直後に `status` が送信され、その後に通常は `message`（`ChatMessage`）が届きます（`app/api/v1/chat.py`）。
+  - フェーズA（開発者向け）では、デバッグ可視化のため `debug_event` がストリーム配信されます。
+
+#### Debug Event（フェーズA）
+- 有効化方法（いずれか）
+  - 接続URLにクエリ付与: `ws://.../api/v1/chat/ws/{session_id}?debug_streaming=1`
+  - バックエンド環境変数: `DEBUG_STREAMING=true`（`.env` → `Settings.debug_streaming`）
+- 例（サニタイズ済み）:
+```json
+{
+  "type": "debug_event",
+  "session_id": "demo-1",
+  "data": {
+    "event_type": "on_chain_start",
+    "ts": 1725235200000,
+    "payload": {
+      "event": "on_chain_start",
+      "name": "analyze_query",
+      "tags": ["graph:step:1"],
+      "metadata": {"langgraph_node": "analyze_query"}
+    }
+  }
+}
+```
+- 注意: 機微情報を避けるため、一部のフィールド（`state/input/inputs/context/config` など）は除去、長文はトリムされます。
 
 ### ファイルアップロード: POST `/api/v1/files/upload`
 - フォーム: `file`(必須, binary), `session_id`(任意)
@@ -124,4 +150,5 @@ curl -s -X POST http://localhost:8002/api/v1/files/upload \
 
 ## 補足
 - 詳細な型は OpenAPI を参照してください（`/docs`）。
-- `debug` はRESTエンドポイントでサポート（現状、WSは通常メッセージを送信）。
+- REST の `debug=true` はメッセージ先頭に `[DEBUG] ...` を付与し、`debug` フィールドを返します。
+- WebSocket の `debug_event` はフェーズAの開発者向けストリーム機能です。

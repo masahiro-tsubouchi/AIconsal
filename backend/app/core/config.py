@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # LangGraph Durable Execution (optional)
     enable_checkpointer: bool = False
     
+    # Debug/Streaming (development-only flags)
+    # Enable WebSocket debug event streaming when true (can be toggled per-request via query param)
+    debug_streaming: bool = False
+    # Placeholder for Phase B (breakpoints). Not used yet.
+    debug_breakpoints: bool = False
+    
     # Timeouts
     llm_generate_timeout_seconds: float = 30.0
     workflow_invoke_timeout_seconds: float = 60.0

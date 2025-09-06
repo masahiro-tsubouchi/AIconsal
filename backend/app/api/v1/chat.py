@@ -1,5 +1,6 @@
 """Chat API endpoints"""
 import time
+import asyncio
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
@@ -48,26 +49,34 @@ async def send_message(
         
         processing_time = time.time() - start_time
         
-        # Create response message
-        assistant_message = ChatMessage(
-            session_id=session_id,
-            content=response_content,
-            role="assistant",
-            processing_time=processing_time
-        )
-
-        # Attach debug header and payload if requested
+        # Build debug payload early to prepend header before creating ChatMessage
         debug_payload = None
         if bool(request.debug):
             last_debug = chat_service.get_last_debug_info()
             if last_debug:
                 try:
                     debug_payload = DebugInfo(**last_debug)
-                    # Prepend display header to assistant content (UIでも使えるように）
-                    assistant_message.content = f"[DEBUG] {debug_payload.display_header}\n\n" + assistant_message.content
                 except Exception as e:  # noqa: BLE001
                     logger.warning("attach_debug_info_failed", session_id=session_id, error=str(e))
+                    debug_payload = None
         
+        # Normalize and clamp content BEFORE ChatMessage creation (min_length=1 constraint)
+        final_content = (response_content or "").strip()
+        if not final_content:
+            final_content = "回答を生成できませんでした。"
+        if debug_payload is not None:
+            final_content = f"[DEBUG] {debug_payload.display_header}\n\n" + final_content
+        if len(final_content) > 4000:
+            final_content = final_content[:4000]
+        
+        # Create response message
+        assistant_message = ChatMessage(
+            session_id=session_id,
+            content=final_content,
+            role="assistant",
+            processing_time=processing_time
+        )
+
         # Save to history
         await chat_service.add_message_to_history(assistant_message)
         
@@ -142,6 +151,12 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
         
         # Initialize chat service first
         chat_service = ChatService()
+        settings = get_settings()
+
+        # Streaming toggle: via query param or settings flag
+        qs = dict(websocket.query_params)
+        ws_debug_streaming = str(qs.get("debug_streaming", "")).lower() in ("1", "true", "yes", "on")
+        debug_streaming_enabled = bool(ws_debug_streaming or getattr(settings, "debug_streaming", False))
         
         # Send connection confirmation (typed JSON)
         status = WSStatus(session_id=session_id, data="connected")
@@ -155,6 +170,31 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 data = await websocket.receive_text()
                 logger.info("websocket_message_received", session_id=session_id, message_length=len(data))
                 
+                # Optionally stream debug events (Phase A)
+                stream_task = None
+                if debug_streaming_enabled:
+                    async def _stream_debug_events():
+                        try:
+                            # Build conversation context to match non-stream path
+                            conv = await chat_service._build_conversation_context(session_id)
+                            async for ev in chat_service._langgraph_service.stream_events(
+                                query=data,
+                                context=conv,
+                                file_context="",
+                                thread_id=session_id,
+                                debug=True,
+                            ):
+                                await websocket.send_json(jsonable_encoder({
+                                    "type": "debug_event",
+                                    "session_id": session_id,
+                                    "data": ev,
+                                }))
+                        except Exception as se:  # noqa: BLE001
+                            logger.warning("websocket_debug_stream_error", session_id=session_id, error=str(se))
+                            return
+
+                    stream_task = asyncio.create_task(_stream_debug_events())
+
                 # Process message
                 response = await chat_service.process_message(
                     message=data,
@@ -173,6 +213,14 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 ws_msg = WSChatMessage(session_id=session_id, data=assistant_message)
                 await websocket.send_json(jsonable_encoder(ws_msg))
                 logger.info("websocket_response_sent", session_id=session_id, response_length=len(response))
+
+                # Ensure streaming task completes per-message before next receive (debug-only)
+                if stream_task is not None:
+                    try:
+                        await stream_task
+                    except Exception:
+                        # Errors already logged in the task
+                        pass
                     
             except WebSocketDisconnect:
                 logger.info("websocket_client_disconnected", session_id=session_id)

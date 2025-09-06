@@ -13,6 +13,7 @@ interface UseWebSocketProps {
   onMessage?: (message: Message) => void;
   onError?: (error: string) => void;
   onStatusUpdate?: (status: string) => void;
+  onDebugEvent?: (ev: any) => void;
 }
 
 interface UseWebSocketReturn {
@@ -27,6 +28,7 @@ export const useWebSocket = ({
   onMessage,
   onError,
   onStatusUpdate,
+  onDebugEvent,
 }: UseWebSocketProps): UseWebSocketReturn => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const socketRef = useRef<WebSocket | null>(null);
@@ -64,7 +66,12 @@ export const useWebSocket = ({
       const baseUrl = process.env.REACT_APP_WS_URL || process.env.REACT_APP_API_URL || 'http://localhost:8002';
       const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
       const wsUrl = baseUrl.replace(/^https?/, wsProtocol);
-      const fullWsUrl = `${wsUrl}/api/v1/chat/ws/${sessionId}`;
+      const enableDebugStreaming = (process.env.REACT_APP_DEBUG_STREAMING || '').toLowerCase() === 'true'
+        || (process.env.REACT_APP_DEBUG_STREAMING || '').toLowerCase() === '1'
+        || (process.env.REACT_APP_DEBUG_STREAMING || '').toLowerCase() === 'yes'
+        || (process.env.REACT_APP_DEBUG_STREAMING || '').toLowerCase() === 'on';
+      const query = enableDebugStreaming ? '?debug_streaming=1' : '';
+      const fullWsUrl = `${wsUrl}/api/v1/chat/ws/${sessionId}${query}`;
 
       console.log('Creating WebSocket connection to:', fullWsUrl);
 
@@ -120,6 +127,20 @@ export const useWebSocket = ({
             }
             if (parsed.type === 'error') {
               onError?.(parsed.data);
+              return;
+            }
+            if (parsed.type === 'debug_event') {
+              // Development-only: log debug events. Does not affect existing behavior.
+              try {
+                const ev = (parsed as any).data;
+                const et = ev?.event_type || 'debug_event';
+                // eslint-disable-next-line no-console
+                console.debug('[WS debug_event]', et, ev);
+                onDebugEvent?.(ev);
+              } catch (e) {
+                // eslint-disable-next-line no-console
+                console.debug('[WS debug_event]', parsed);
+              }
               return;
             }
             if (parsed.type === 'message') {
